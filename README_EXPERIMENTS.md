@@ -38,6 +38,35 @@ instalación manual**, solo para estos experimentos:
   falta que exista), sino un wheel que sí incluya kernels `sm_120`: **`cu128`** (PyTorch ≥2.7).
   Comando exacto en la sección 4.
 
+> **Problema conocido en Windows: build de `stringzilla` falla (`Microsoft Visual
+> C++ 14.0 or greater is required`)**. `albumentations` **no** está pineado en
+> `requirements-windows.txt` de este repo (Ultralytics lo trata como opcional
+> y lo auto-instala en tiempo de ejecución si detecta que hace falta para
+> ciertos aumentos); pero si lo instalas manualmente o el auto-install de
+> Ultralytics lo dispara, arrastra `albucore`, que exige `stringzilla>=3.10.4`.
+> Desde su serie 2.x, `stringzilla` **dejó de publicar wheels precompilados
+> para Windows** en PyPI (los últimos `win_amd64` disponibles son de la serie
+> 1.2.x, por debajo del mínimo que pide `albucore`), así que `pip` intenta
+> compilarlo desde el código fuente y falla sin el compilador de Microsoft
+> C++. Es el mismo problema documentado en el repo hermano
+> [YOLOv12](https://github.com/pedroamtech/YOLOv12/blob/main/README_EXPERIMENTS.md#2-diferencias-requirementstxt-original-vs-requirements-windowstxt-nuevo) —
+> no es específico de `yolo11l.pt` ni de `yolo12l.pt`, es una limitación del
+> paquete `stringzilla` en Windows que afecta a cualquier modelo de
+> Ultralytics que termine dependiendo de `albumentations`.
+>
+> **Fix (verificado)**: instalar *Build Tools for Visual Studio*
+> (https://visualstudio.microsoft.com/visual-cpp-build-tools/) **no basta por
+> sí solo** — el instalador base no incluye el compilador de C++. Abre
+> **"Visual Studio Installer"**, elige **Modificar** sobre "Visual Studio
+> Build Tools", y en la pestaña *Workloads* marca explícitamente **"Desktop
+> development with C++"** (trae MSVC v143 + Windows SDK). Sin ese workload
+> marcado, `cl.exe` no existe en el sistema y el error persiste aunque el
+> instalador ya se haya "completado". Tras instalar el workload, cierra todas
+> las ventanas de PowerShell abiertas, abre una nueva, reactiva el entorno
+> conda (`conda activate yolov11`) y reintenta la instalación — `stringzilla`
+> es código SIMD portable en C/C++ y compila sin problemas una vez presente
+> el compilador.
+
 ## 3. Creación del entorno virtual (Anaconda)
 
 ```powershell
