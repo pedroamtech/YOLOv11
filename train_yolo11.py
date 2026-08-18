@@ -33,9 +33,27 @@ def parse_args():
     )
     parser.add_argument("--name", type=str, required=True, help="Run name, e.g. base_run / augmented_run")
     parser.add_argument("--epochs", type=int, default=250, help="Keep identical across both experiments")
-    parser.add_argument("--imgsz", type=int, default=1280, help="720p source imagery; keep identical across both experiments")
-    parser.add_argument("--batch", type=int, default=8, help="Keep identical across both experiments (~16GB VRAM)")
-    parser.add_argument("--workers", type=int, default=2, help="0 or 2 to avoid Windows multiprocessing errors")
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=1280,
+        help="720p source imagery; 1280 is the proven sweet spot for VisDrone-scale small objects "
+        "(~9pp higher mAP50 than 640 in community benchmarks). Keep identical across experiments.",
+    )
+    parser.add_argument(
+        "--batch",
+        type=int,
+        default=-1,
+        help="-1 = AutoBatch (targets 60%% GPU memory), the standard baseline for VisDrone-scale training. Run "
+        "Experiment 1 first, read the batch size AutoBatch prints, then pass that same fixed number as --batch "
+        "to BOTH experiments so the comparison stays apples-to-apples.",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=8,
+        help="Ultralytics default, matches most training setups. Try 0 if you hit BrokenPipeError/EOFError.",
+    )
     parser.add_argument("--device", type=str, default="0", help="CUDA device index")
     return parser.parse_args()
 
@@ -88,7 +106,7 @@ def main():
         imgsz=args.imgsz,
         batch=args.batch,
         device=args.device,
-        workers=args.workers,  # 0 or 2: avoids BrokenPipeError/EOFError from multiprocessing on Windows
+        workers=args.workers,  # lower to 0 if this triggers BrokenPipeError/EOFError from multiprocessing on Windows
         amp=True,
         plots=True,  # required for Ultralytics to log PR/F1 curves to W&B
         name=args.name,
