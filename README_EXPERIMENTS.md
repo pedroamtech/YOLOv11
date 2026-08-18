@@ -38,6 +38,13 @@ instalación manual**, solo para estos experimentos:
   falta que exista), sino un wheel que sí incluya kernels `sm_120`: **`cu128`** (PyTorch ≥2.7).
   Comando exacto en la sección 4.
 
+  **Verificado en hardware real** (2026-08-17): se reprodujo el fallo exacto con `torch
+  2.6.0+cu124` — `torch.cuda.is_available()` devolvía `True`, pero `torch.randn(4,4).cuda() @ ...`
+  lanzaba `RuntimeError: CUDA error: no kernel image is available for execution on the device`,
+  con la advertencia previa de PyTorch listando soporte hasta `sm_90` (no incluye `sm_120`).
+  Tras reinstalar con el comando de la sección 4, `torch 2.11.0+cu128` reconoció la RTX 5060 Ti
+  (`get_device_capability(0) = (12, 0)`) y ejecutó la misma operación en GPU sin error.
+
 > **Problema conocido en Windows: build de `stringzilla` falla (`Microsoft Visual
 > C++ 14.0 or greater is required`)**. `albumentations` **no** está pineado en
 > `requirements-windows.txt` de este repo (Ultralytics lo trata como opcional
