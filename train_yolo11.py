@@ -1,5 +1,5 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
-"""Train YOLO11l on VisDrone (single 'person' class) on Windows, tracked in Weights & Biases.
+"""Train YOLO11m on VisDrone (single 'person' class) on Windows, tracked in Weights & Biases.
 
 Usage (PowerShell, from the repo root):
     python train_yolo11.py `
@@ -25,9 +25,9 @@ from dotenv import load_dotenv
 
 def parse_args():
     """Parse command-line arguments for a single training run."""
-    parser = argparse.ArgumentParser(description="Train YOLO11l on VisDrone (Windows, RTX 5060 Ti, 16GB VRAM)")
+    parser = argparse.ArgumentParser(description="Train YOLO11m on VisDrone (Windows, RTX 5060 Ti, 16GB VRAM)")
     parser.add_argument("--data", type=str, required=True, help="Path to visdrone_base.yaml or visdrone_augmented.yaml")
-    parser.add_argument("--model", type=str, default="yolo11l.pt", help="Checkpoint to fine-tune from")
+    parser.add_argument("--model", type=str, default="yolo11m.pt", help="Checkpoint to fine-tune from")
     parser.add_argument(
         "--project", type=str, default=None, help="W&B project name (single, shared); overrides WANDB_PROJECT from .env"
     )

@@ -1,6 +1,6 @@
-# VisDrone (person) — Experimentos de entrenamiento YOLO11l en Windows
+# VisDrone (person) — Experimentos de entrenamiento YOLO11m en Windows
 
-Configuración local de entrenamiento en Windows para `yolo11l.pt` sobre VisDrone reducido a una
+Configuración local de entrenamiento en Windows para `yolo11m.pt` sobre VisDrone reducido a una
 sola clase ("person"), comparando un dataset base contra una copia con aumentado offline, con
 seguimiento en Weights & Biases. Estos archivos viven en la raíz del repo (mismo esquema que el
 repo hermano [YOLOv12](https://github.com/pedroamtech/YOLOv12): `train_yolo12.py`,
@@ -15,7 +15,7 @@ aditivos: no modifican nada bajo `ultralytics/` ni el `requirements.txt` origina
 | GPU | NVIDIA GeForce RTX 5060 Ti, 16 GB VRAM (Blackwell, compute capability sm_120) |
 | CUDA Toolkit / driver | 13.3 |
 | Framework | PyTorch con soporte CUDA |
-| Modelo | YOLO11 Large (`yolo11l.pt`), arquitectura C3k2/C2PSA |
+| Modelo | YOLO11 Medium (`yolo11m.pt`), arquitectura C3k2/C2PSA — se eligió Medium en vez de Large por menor requerimiento de cómputo/VRAM |
 
 ## 2. Diferencias: `requirements.txt` (original) vs `requirements-windows.txt` (nuevo)
 
