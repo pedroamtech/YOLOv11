@@ -7,6 +7,23 @@ repo hermano [YOLOv12](https://github.com/pedroamtech/YOLOv12): `train_yolo12.py
 `requirements-windows.txt`, `README_EXPERIMENTS.md`, `.env`/`.env.example`, `data/*.yaml`) y son
 aditivos: no modifican nada bajo `ultralytics/` ni el `requirements.txt` original.
 
+## Cómo usar esta guía
+
+Sigue el orden de las secciones para evitar errores de entorno o de ejecución:
+
+1. **Preparación del entorno** (§1-4): hardware requerido, diferencias entre `requirements.txt`
+   y `requirements-windows.txt`, creación del entorno Anaconda, e instalación manual paso a paso.
+2. **Configuración de parámetros** (§5-7): estructura de directorios y datasets esperada,
+   hiperparámetros que se mantienen idénticos entre los dos experimentos, y credenciales de W&B.
+3. **Ejecución** (§8): los dos comandos de entrenamiento, uno por dataset (base y aumentado).
+4. **Verificación de resultados** (§9-10): qué métricas quedan registradas en W&B y cómo
+   confirmar que la GPU quedó bien configurada antes de entrenar.
+
+Si algo falla o los resultados difieren de lo documentado, revisa primero **§2**: ahí están los
+dos problemas que ya se diagnosticaron y resolvieron en este mismo hardware (el fallo de `cu124`
+con la RTX 5060 Ti, y el build de `stringzilla` en Windows) antes de asumir que es un problema
+nuevo.
+
 ## 1. Hardware y entorno
 
 | Componente | Especificación |
