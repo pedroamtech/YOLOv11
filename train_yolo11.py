@@ -34,19 +34,14 @@ def parse_args():
     parser.add_argument("--name", type=str, required=True, help="Run name, e.g. base_run / augmented_run")
     parser.add_argument("--epochs", type=int, default=250, help="Keep identical across both experiments")
     parser.add_argument(
-        "--imgsz",
-        type=int,
-        default=1280,
-        help="720p source imagery; 1280 is the proven sweet spot for VisDrone-scale small objects "
-        "(~9pp higher mAP50 than 640 in community benchmarks). Keep identical across experiments.",
+        "--imgsz", type=int, default=640, help="Ultralytics/YOLO standard. Keep identical across both experiments."
     )
     parser.add_argument(
         "--batch",
         type=int,
-        default=-1,
-        help="-1 = AutoBatch (targets 60%% GPU memory), the standard baseline for VisDrone-scale training. Run "
-        "Experiment 1 first, read the batch size AutoBatch prints, then pass that same fixed number as --batch "
-        "to BOTH experiments so the comparison stays apples-to-apples.",
+        default=16,
+        help="At 640px there's much more VRAM headroom than at 1280px (where 8 already OOM'd) — a reasonable "
+        "starting point, not yet verified on this dataset. Keep identical across both experiments.",
     )
     parser.add_argument(
         "--workers",

@@ -170,10 +170,8 @@ entre ellos:
 | `patience` | `100` |
 
 Solo se controlan parámetros de **ejecución/hardware** (no de red): `epochs`, `imgsz`, `batch`,
-`workers`, `amp`, `device` — ver §8. Los valores de `imgsz`/`batch`/`workers` por defecto de
-`train_yolo11.py` (`1280` / AutoBatch / `8`) siguen la práctica más común para detección de
-objetos pequeños en imágenes aéreas tipo VisDrone, no solo lo que entra en 16 GB de VRAM — ver el
-razonamiento en §8.
+`workers`, `amp`, `device` — ver §8. Los valores por defecto de `train_yolo11.py` son `imgsz=640`
+(estándar YOLO/Ultralytics), `batch=16` y `workers=8` — ver el razonamiento en §8.
 
 ## 7. Credenciales W&B (seguras, sin hardcodear)
 
@@ -198,21 +196,17 @@ Con el entorno `yolov11` (§3) activado:
 Copy-Item .env.example .env
 notepad .env
 
-# Experimento 1 — dataset base (AutoBatch: deja que elija el batch óptimo para tu GPU)
+# Experimento 1 — dataset base
 python train_yolo11.py `
     --data data\visdrone_base.yaml `
     --name base_run `
-    --epochs 250 --imgsz 1280 --batch -1 --workers 8
-
-# Anota el batch que AutoBatch imprimió arriba (línea "Using batch-size N for CUDA:0 ...") y
-# fíjalo igual en el Experimento 2 para que la comparación sea apples-to-apples, ej.:
-#   --batch 12
+    --epochs 250 --imgsz 640 --batch 16 --workers 8
 
 # Experimento 2 — dataset con aumentado offline (mismos hiperparámetros, distinto --data/--name)
 python train_yolo11.py `
     --data data\visdrone_augmented.yaml `
     --name augmented_run `
-    --epochs 250 --imgsz 1280 --batch -1 --workers 8
+    --epochs 250 --imgsz 640 --batch 16 --workers 8
 ```
 
 Ambas corridas usan `WANDB_PROJECT=YOLOv11` desde `.env` (o pasa `--project <tu-proyecto>` para
@@ -220,19 +214,14 @@ sobreescribirlo). Resultados locales guardados en carpetas independientes: `runs
 y `runs\detect\augmented_run\` (ya cubiertas por la regla `runs/` del `.gitignore`) — separados de
 a qué proyecto de W&B reportan.
 
-> **Por qué estos valores (`imgsz=1280`, AutoBatch, `workers=8`)**: son los que usa la mayoría de
-> configuraciones de detección en imágenes aéreas tipo VisDrone, no solo lo que entra en 16 GB de
-> VRAM. `imgsz=1280` es el punto óptimo reportado en benchmarks de la comunidad para objetos
-> pequeños estilo VisDrone (rango probado 960-1280; bajar a 640 cuesta ~9 puntos de mAP50) — más
-> relevante aún con imágenes fuente 1280×720, donde Ultralytics usa el lado largo (`1280`) como
-> `imgsz` y rellena (padding) el lado corto sin perder detalle. `batch=-1` activa **AutoBatch**
-> (apunta al 60% de la VRAM libre), la línea base recomendada para VisDrone en vez de adivinar un
-> número fijo — dado que el requisito original pide el **mismo** batch en ambos experimentos,
-> corre primero el Experimento 1 con AutoBatch, anota el valor que eligió, y pásalo fijo (`--batch
-> N`) a los dos. `workers=8` es el valor por defecto de Ultralytics (ver `ultralytics/cfg/default.yaml`)
-> y el más usado en general; solo baja a `0` si aparece `BrokenPipeError`/`EOFError` por
-> multiprocessing en Windows — con el guard `if __name__ == "__main__":` que ya tiene este script,
-> no debería ser necesario.
+> **Por qué estos valores (`imgsz=640`, `batch=16`, `workers=8`)**: `imgsz=640` es el estándar
+> YOLO/Ultralytics (`ultralytics/cfg/default.yaml`). `batch=16` es un punto de partida razonable
+> — a 640px hay mucho más margen de VRAM que a 1280px (donde `batch=8` ya daba OOM en pruebas
+> anteriores); no está verificado aún específicamente en este dataset, así que si aparece `OOM`
+> baja `--batch`, y si sobra VRAM puedes subirlo — solo usa el **mismo** valor en ambos
+> experimentos para que la comparación siga siendo válida. `workers=8` no cambia: ya estaba bien
+> dimensionado para tu CPU de 24 hilos, independientemente de la resolución; solo baja a `0` si
+> aparece `BrokenPipeError`/`EOFError` por multiprocessing en Windows.
 
 ## 9. Métricas registradas en W&B
 
