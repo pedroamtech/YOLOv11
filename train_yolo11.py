@@ -1,0 +1,95 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+"""Train YOLO11l on VisDrone (single 'person' class) on Windows, tracked in Weights & Biases.
+
+Usage (PowerShell, from the repo root):
+    python train_yolo11.py `
+        --data data\visdrone_base.yaml `
+        --project VisDrone-YOLO11L-Base `
+        --name base_run
+
+    python train_yolo11.py `
+        --data data\visdrone_augmented.yaml `
+        --project VisDrone-YOLO11L-Augmented `
+        --name augmented_run
+
+Both commands above pass identical --epochs/--imgsz/--batch/--workers so the two experiments stay
+comparable; only --data (and therefore --project) differs. See README_EXPERIMENTS.md.
+"""
+
+import argparse
+import os
+
+import torch
+from dotenv import load_dotenv
+
+
+def parse_args():
+    """Parse command-line arguments for a single training run."""
+    parser = argparse.ArgumentParser(description="Train YOLO11l on VisDrone (Windows, RTX 5060 Ti, 16GB VRAM)")
+    parser.add_argument("--data", type=str, required=True, help="Path to visdrone_base.yaml or visdrone_augmented.yaml")
+    parser.add_argument("--model", type=str, default="yolo11l.pt", help="Checkpoint to fine-tune from")
+    parser.add_argument("--project", type=str, default=None, help="W&B project name; overrides WANDB_PROJECT from .env")
+    parser.add_argument("--name", type=str, required=True, help="Run name, e.g. base_run / augmented_run")
+    parser.add_argument("--epochs", type=int, default=100, help="Keep identical across both experiments")
+    parser.add_argument("--imgsz", type=int, default=640, help="Keep identical across both experiments")
+    parser.add_argument("--batch", type=int, default=16, help="Keep identical across both experiments (~16GB VRAM)")
+    parser.add_argument("--workers", type=int, default=2, help="0 or 2 to avoid Windows multiprocessing errors")
+    parser.add_argument("--device", type=str, default="0", help="CUDA device index")
+    return parser.parse_args()
+
+
+def verify_gpu():
+    """Print CUDA/GPU diagnostics and fail fast if the RTX 5060 Ti is not visible to PyTorch."""
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "torch.cuda.is_available() is False. Verify the NVIDIA driver is installed and that torch was "
+            "installed from the CUDA wheel index (see requirements-windows.txt), not the CPU wheel."
+        )
+    print(f"torch.cuda.is_available() = {torch.cuda.is_available()}")
+    print(f"torch.version.cuda        = {torch.version.cuda}")
+    print(f"torch.cuda.get_device_name(0) = {torch.cuda.get_device_name(0)}")
+
+
+def main():
+    """Load credentials from .env, verify the GPU, and run one YOLO11l training on VisDrone."""
+    args = parse_args()
+    load_dotenv()  # reads .env from the current working directory (repo root)
+
+    wandb_api_key = os.environ.get("WANDB_API_KEY")
+    if not wandb_api_key:
+        raise RuntimeError("WANDB_API_KEY not set. Copy .env.example to .env at the repo root and fill it in.")
+
+    project = args.project or os.environ.get("WANDB_PROJECT")
+    if not project:
+        raise RuntimeError("No W&B project set. Pass --project or set WANDB_PROJECT in .env.")
+
+    import wandb
+
+    wandb.login(key=wandb_api_key)
+
+    verify_gpu()
+
+    from ultralytics import YOLO, settings
+
+    settings.update({"wandb": True})  # enables ultralytics/utils/callbacks/wb.py (mAP, PR/F1 curves, losses, etc.)
+
+    model = YOLO(args.model)
+    model.train(
+        data=args.data,
+        epochs=args.epochs,
+        imgsz=args.imgsz,
+        batch=args.batch,
+        device=args.device,
+        workers=args.workers,  # 0 or 2: avoids BrokenPipeError/EOFError from multiprocessing on Windows
+        amp=True,
+        plots=True,  # required for Ultralytics to log PR/F1 curves to W&B
+        project=project,
+        name=args.name,
+        exist_ok=True,
+        # No other hyperparameter is set here: optimizer, lr0, mosaic, mixup, fliplr, etc. all come
+        # from ultralytics/cfg/default.yaml so Experiment 1 and Experiment 2 remain comparable.
+    )
+
+
+if __name__ == "__main__":
+    main()

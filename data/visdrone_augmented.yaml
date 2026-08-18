@@ -1,0 +1,28 @@
+# VisDrone (single class: person) — Experiment 2: offline-augmented dataset
+# This points at a SEPARATE copy of the images/labels that you have already processed through
+# your own offline augmentation pipeline (e.g. weather/noise/blur synthesis, tiling, etc.).
+# The YOLO built-in on-the-fly augmentations (mosaic, mixup, fliplr, etc.) still apply on top,
+# identically to Experiment 1, because train_yolo11.py does not change any augmentation
+# hyperparameter between the two runs — only this `path` differs.
+#
+# `path` is bare (no "../"): Ultralytics resolves a relative `path` against the global
+# `datasets_dir` setting (see `from ultralytics import settings; print(settings["datasets_dir"])`),
+# which defaults to <parent of this repo checkout>/datasets — i.e. this expects:
+#   <repo-parent>/datasets/VisDrone_person_augmented/images/train
+#   <repo-parent>/datasets/VisDrone_person_augmented/images/val
+#   <repo-parent>/datasets/VisDrone_person_augmented/images/test  (optional)
+#   <repo-parent>/datasets/VisDrone_person_augmented/labels/train
+#   <repo-parent>/datasets/VisDrone_person_augmented/labels/val
+#   <repo-parent>/datasets/VisDrone_person_augmented/labels/test  (optional)
+#
+# If your local copy lives elsewhere, either move it under `datasets_dir`, change `datasets_dir`
+# via `yolo settings datasets_dir=...`, or set `path` here to an absolute path.
+
+path: VisDrone_person_augmented
+train: images/train
+val: images/val
+test: images/test
+
+nc: 1
+names:
+  0: person

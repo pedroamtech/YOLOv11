@@ -1,0 +1,51 @@
+# Windows manual install list for the VisDrone / YOLO11L (yolo11l.pt) experiments.
+# This file is INDEPENDENT from the repo's root requirements.txt and does not replace it.
+#
+# IMPORTANT — install order matters:
+#   1) Install PyTorch FIRST, from the CUDA wheel index (command below, NOT from this file).
+#   2) Then install this file. If you `pip install -r` this file before step 1, pip may resolve
+#      a CPU-only torch build from PyPI and step 1's CUDA build would need to be reinstalled.
+#
+# ---------------------------------------------------------------------------------------------
+# STEP 1 — PyTorch with CUDA support for an RTX 5060 Ti (Blackwell, compute capability sm_120)
+# ---------------------------------------------------------------------------------------------
+# NOTE ON THE REQUESTED "cu124" INDEX: cu124 wheels predate Blackwell (RTX 50-series) GPU kernel
+# support and will raise "CUDA error: no kernel image is available for execution on the device"
+# on an RTX 5060 Ti even though torch.cuda.is_available() returns True. The NVIDIA driver's
+# "CUDA Toolkit 13.3" capability is backward compatible with older PyTorch CUDA runtimes, so you
+# do NOT need a cu13x wheel index to exist — you need a wheel that ships sm_120 kernels, which is
+# cu128 (or newer) starting with PyTorch 2.7. Use:
+#
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+#
+# If you specifically need the cu124 index for another reason, add sm_120 support is NOT present
+# there — do not use it for this GPU.
+#
+# ---------------------------------------------------------------------------------------------
+# STEP 2 — install this file
+# ---------------------------------------------------------------------------------------------
+#   pip install -r requirements-windows.txt
+#
+# No Linux-only packages (triton, flash-attn, etc.) are present in this repo's base dependency
+# set (pyproject.toml), so none needed to be stripped here; this list is the Windows-safe runtime
+# set for `ultralytics` training plus the two additions needed for W&B credential-based tracking.
+
+filelock>=3.16.1
+numpy>=1.23.0
+matplotlib>=3.3.0
+opencv-python>=4.7.0,!=4.13.0.90
+pillow>=7.1.2
+pyyaml>=5.3.1
+requests>=2.23.0
+psutil>=5.8.0
+polars>=0.20.0
+nvidia-ml-py>=12.0.0
+ultralytics-thop>=2.1.6
+tqdm>=4.64.0
+
+# Ultralytics itself (editable install from your clone is recommended instead — see README_EXPERIMENTS.md)
+ultralytics>=8.3.0
+
+# Experiment tracking
+wandb>=0.17.0
+python-dotenv>=1.0.1

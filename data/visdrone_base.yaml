@@ -1,0 +1,25 @@
+# VisDrone (single class: person) — Experiment 1: base dataset
+# Only the default, built-in YOLO on-the-fly augmentations apply (mosaic, mixup, fliplr, etc.
+# from ultralytics/cfg/default.yaml) — nothing here overrides them.
+#
+# `path` is bare (no "../"): Ultralytics resolves a relative `path` against the global
+# `datasets_dir` setting (see `from ultralytics import settings; print(settings["datasets_dir"])`),
+# which defaults to <parent of this repo checkout>/datasets — i.e. this expects:
+#   <repo-parent>/datasets/VisDrone_person_base/images/train
+#   <repo-parent>/datasets/VisDrone_person_base/images/val
+#   <repo-parent>/datasets/VisDrone_person_base/images/test      (optional)
+#   <repo-parent>/datasets/VisDrone_person_base/labels/train      (YOLO .txt, normalized xywh, class 0 only)
+#   <repo-parent>/datasets/VisDrone_person_base/labels/val
+#   <repo-parent>/datasets/VisDrone_person_base/labels/test       (optional)
+#
+# If your local copy lives elsewhere, either move it under `datasets_dir`, change `datasets_dir`
+# via `yolo settings datasets_dir=...`, or set `path` here to an absolute path.
+
+path: VisDrone_person_base
+train: images/train
+val: images/val
+test: images/test
+
+nc: 1
+names:
+  0: person
