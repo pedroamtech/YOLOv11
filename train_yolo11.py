@@ -4,16 +4,16 @@
 Usage (PowerShell, from the repo root):
     python train_yolo11.py `
         --data data\visdrone_base.yaml `
-        --project VisDrone-YOLO11L-Base `
         --name base_run
 
     python train_yolo11.py `
         --data data\visdrone_augmented.yaml `
-        --project VisDrone-YOLO11L-Augmented `
         --name augmented_run
 
 Both commands above pass identical --epochs/--imgsz/--batch/--workers so the two experiments stay
-comparable; only --data (and therefore --project) differs. See README_EXPERIMENTS.md.
+comparable; only --data (and therefore --name) differs. Both runs report to the SAME W&B project
+(--project / WANDB_PROJECT, e.g. an existing "YOLOv11" project) and are told apart by --name, not
+by separate auto-created projects. See README_EXPERIMENTS.md.
 """
 
 import argparse
@@ -28,7 +28,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train YOLO11l on VisDrone (Windows, RTX 5060 Ti, 16GB VRAM)")
     parser.add_argument("--data", type=str, required=True, help="Path to visdrone_base.yaml or visdrone_augmented.yaml")
     parser.add_argument("--model", type=str, default="yolo11l.pt", help="Checkpoint to fine-tune from")
-    parser.add_argument("--project", type=str, default=None, help="W&B project name; overrides WANDB_PROJECT from .env")
+    parser.add_argument(
+        "--project", type=str, default=None, help="W&B project name (single, shared); overrides WANDB_PROJECT from .env"
+    )
     parser.add_argument("--name", type=str, required=True, help="Run name, e.g. base_run / augmented_run")
     parser.add_argument("--epochs", type=int, default=250, help="Keep identical across both experiments")
     parser.add_argument("--imgsz", type=int, default=1280, help="720p source imagery; keep identical across both experiments")
@@ -67,6 +69,11 @@ def main():
     import wandb
 
     wandb.login(key=wandb_api_key)
+    # Start the W&B run ourselves so every experiment lands in the SAME project (e.g. an existing
+    # "YOLOv11" project), distinguished only by --name. If we didn't do this, Ultralytics' built-in
+    # wb.py callback would call wandb.init(project=trainer.args.project, ...) itself using the local
+    # results `project` folder as the W&B project name, creating a new project per run.
+    wandb.init(project=project, name=args.name, config=vars(args))
 
     verify_gpu()
 
@@ -84,9 +91,10 @@ def main():
         workers=args.workers,  # 0 or 2: avoids BrokenPipeError/EOFError from multiprocessing on Windows
         amp=True,
         plots=True,  # required for Ultralytics to log PR/F1 curves to W&B
-        project=project,
         name=args.name,
         exist_ok=True,
+        # No `project=` here: leaving it unset keeps local results under runs/detect/<name>,
+        # independent from the W&B project set above via wandb.init().
         # No other hyperparameter is set here: optimizer, lr0, mosaic, mixup, fliplr, etc. all come
         # from ultralytics/cfg/default.yaml so Experiment 1 and Experiment 2 remain comparable.
     )

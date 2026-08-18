@@ -179,8 +179,12 @@ Solo se controlan parámetros de **ejecución/hardware** (no de red): `epochs`, 
 - `train_yolo11.py` carga `.env` con `python-dotenv` y llama a `wandb.login(key=...)` antes de
   entrenar; si `WANDB_API_KEY` falta, el script aborta con un mensaje claro en vez de entrenar
   sin tracking.
-- Cada experimento reporta a su **propio proyecto W&B**, indicado con `--project` en cada corrida
-  (ver §8) — Base y Augmented nunca se mezclan en el mismo proyecto.
+- Ambos experimentos reportan al **mismo proyecto W&B** (uno ya creado por ti, ej. `YOLOv11`) —
+  se distinguen por `--name` (`base_run` / `augmented_run`), no creando un proyecto nuevo por
+  corrida. `train_yolo11.py` llama a `wandb.init(project=..., name=...)` **antes** de
+  `model.train()`, así que el callback nativo `wb.py` de Ultralytics detecta el run ya activo
+  (`if not wb.run:`) y reutiliza ese mismo proyecto en vez de crear uno propio a partir de la
+  carpeta local de resultados.
 
 ## 8. Ejecutar ambos entrenamientos (PowerShell)
 
@@ -194,20 +198,20 @@ notepad .env
 # Experimento 1 — dataset base
 python train_yolo11.py `
     --data data\visdrone_base.yaml `
-    --project VisDrone-YOLO11L-Base `
     --name base_run `
     --epochs 250 --imgsz 1280 --batch 8 --workers 2
 
-# Experimento 2 — dataset con aumentado offline (mismos hiperparámetros, distinto --data/--project)
+# Experimento 2 — dataset con aumentado offline (mismos hiperparámetros, distinto --data/--name)
 python train_yolo11.py `
     --data data\visdrone_augmented.yaml `
-    --project VisDrone-YOLO11L-Augmented `
     --name augmented_run `
     --epochs 250 --imgsz 1280 --batch 8 --workers 2
 ```
 
-Resultados guardados en carpetas independientes: `runs\detect\base_run\` y
-`runs\detect\augmented_run\` (ya cubiertas por la regla `runs/` del `.gitignore`).
+Ambas corridas usan `WANDB_PROJECT=YOLOv11` desde `.env` (o pasa `--project <tu-proyecto>` para
+sobreescribirlo). Resultados locales guardados en carpetas independientes: `runs\detect\base_run\`
+y `runs\detect\augmented_run\` (ya cubiertas por la regla `runs/` del `.gitignore`) — separados de
+a qué proyecto de W&B reportan.
 
 > **Resolución de imagen (720p)**: las imágenes fuente son 1280×720. En modo `train`, Ultralytics
 > recibe `imgsz` como un único entero que define el lado largo del letterbox cuadrado (aquí
