@@ -1,45 +1,44 @@
-# VisDrone (person) — YOLO11l Windows Training Experiments
+# VisDrone (person) — Experimentos de entrenamiento YOLO11l en Windows
 
-Local Windows training setup for `yolo11l.pt` on a single-class ("person") VisDrone dataset,
-comparing a base dataset against an offline-augmented copy, tracked in Weights & Biases. These
-files live at the repo root (mirroring the layout used in the sibling
-[YOLOv12](https://github.com/pedroamtech/YOLOv12) repo: `train_yolo12.py`,
-`requirements-windows.txt`, `README_EXPERIMENTS.md`, `.env.example`, `data/*.yaml`) and are
-additive: nothing under `ultralytics/` is modified, and `requirements.txt` is untouched.
+Configuración local de entrenamiento en Windows para `yolo11l.pt` sobre VisDrone reducido a una
+sola clase ("person"), comparando un dataset base contra una copia con aumentado offline, con
+seguimiento en Weights & Biases. Estos archivos viven en la raíz del repo (mismo esquema que el
+repo hermano [YOLOv12](https://github.com/pedroamtech/YOLOv12): `train_yolo12.py`,
+`requirements-windows.txt`, `README_EXPERIMENTS.md`, `.env`/`.env.example`, `data/*.yaml`) y son
+aditivos: no modifican nada bajo `ultralytics/` ni el `requirements.txt` original.
 
-## 1. Hardware
+## 1. Hardware y entorno
 
-| Component | Spec |
+| Componente | Especificación |
 |---|---|
+| Sistema operativo | Windows 11 |
 | GPU | NVIDIA GeForce RTX 5060 Ti, 16 GB VRAM (Blackwell, compute capability sm_120) |
 | CUDA Toolkit / driver | 13.3 |
-| OS | Windows 11 |
+| Framework | PyTorch con soporte CUDA |
+| Modelo | YOLO11 Large (`yolo11l.pt`), arquitectura C3k2/C2PSA |
 
-## 2. `requirements-windows.txt` vs. the repo's `requirements.txt`
+## 2. Diferencias: `requirements.txt` (original) vs `requirements-windows.txt` (nuevo)
 
-The repo does not track a root `requirements.txt` (it's git-ignored; dependencies live in
-`pyproject.toml`). `requirements-windows.txt` is a **separate, manually-installed** list for this
-experiment only. Differences from a plain `pip install -e .`:
+Este repo no versiona un `requirements.txt` en la raíz (está en `.gitignore`; las dependencias
+viven en `pyproject.toml`). `requirements-windows.txt` es una lista **independiente, de
+instalación manual**, solo para estos experimentos:
 
-- **PyTorch is installed separately, first, from a CUDA wheel index** — see the correction below.
-- **No Linux-only packages were present to strip.** This repo's `pyproject.toml` base
-  dependencies contain no `triton` or `flash-attn`; those only ever appear (in other projects,
-  e.g. the sibling YOLOv12 repo) as optional/export extras. `requirements-windows.txt` is
-  therefore just the Windows-safe runtime set plus two additions: `wandb` and `python-dotenv`,
-  for credential-based experiment tracking.
-- **Correction on the requested `cu124` index:** cu124 PyTorch wheels predate Blackwell (RTX
-  50-series) kernel support. Installing torch from `cu124` on an RTX 5060 Ti passes
-  `torch.cuda.is_available()` but fails at the first kernel launch with *"CUDA error: no kernel
-  image is available for execution on the device."* The NVIDIA driver's CUDA 13.3 capability is
-  backward-compatible with older PyTorch CUDA runtimes, so the fix is not a `cu13x` wheel index
-  (doesn't need to exist) — it's using a wheel that ships sm_120 kernels, i.e. **`cu128`** (PyTorch
-  ≥2.7). Install command in section 3.
+- **PyTorch se instala aparte, primero, desde el índice de wheels CUDA** — ver la corrección de
+  abajo.
+- **No había paquetes exclusivos de Linux que quitar.** Las dependencias base de este
+  `pyproject.toml` no incluyen `triton` ni `flash-attn` (a diferencia del repo hermano YOLOv12,
+  donde sí aparecían como extras y se retiraron). `requirements-windows.txt` es entonces el set
+  de runtime seguro para Windows más dos añadidos: `wandb` y `python-dotenv`, para el tracking
+  con credenciales.
+- **Corrección sobre el índice `cu124` originalmente solicitado:** los wheels `cu124` de PyTorch
+  son anteriores al soporte de Blackwell (RTX serie 50) y fallan en la RTX 5060 Ti con *"CUDA
+  error: no kernel image is available for execution on the device"* aunque
+  `torch.cuda.is_available()` devuelva `True`. El driver CUDA 13.3 es retrocompatible con
+  runtimes CUDA de PyTorch más antiguos, así que la solución no es un índice `cu13x` (no hace
+  falta que exista), sino un wheel que sí incluya kernels `sm_120`: **`cu128`** (PyTorch ≥2.7).
+  Comando exacto en la sección 4.
 
-## 3. Manual install (PowerShell)
-
-### Step 1 — Anaconda / Miniconda environment
-
-Same layout as the sibling [YOLOv12](https://github.com/pedroamtech/YOLOv12) repo's env setup:
+## 3. Creación del entorno virtual (Anaconda)
 
 ```powershell
 conda create -n yolov11 python=3.11 -y
@@ -47,136 +46,123 @@ conda activate yolov11
 python -m pip install --upgrade pip
 ```
 
-`python=3.11` matches this repo's actively-supported floor and has solid prebuilt-wheel coverage
-for `torch`/`onnxruntime`. Verify the right interpreter is active before continuing:
+`python=3.11` coincide con el piso de soporte activo de este repo y tiene buena cobertura de
+wheels precompilados para `torch`/`onnxruntime`. Verifica que el intérprete correcto esté activo:
 
 ```powershell
-where.exe python   # should point inside \Anaconda3\envs\yolov11\ or \Miniconda3\envs\yolov11\
+where.exe python   # debe apuntar dentro de \Anaconda3\envs\yolov11\ o \Miniconda3\envs\yolov11\
 ```
 
-To tear it down later: `conda deactivate` then `conda env remove -n yolov11`.
+Para desmontarlo después: `conda deactivate` y luego `conda env remove -n yolov11`.
 
-### Steps 2–4
+## 4. Instalación manual en Windows (ningún script automático)
+
+Con el entorno `yolov11` activado (sección 3):
 
 ```powershell
-# 2) PyTorch with CUDA support for the RTX 5060 Ti — install this BEFORE step 3.
-#    Still via pip inside the conda env: conda-forge's pytorch build lags on new CUDA/arch
-#    support (Blackwell/sm_120), so pip + the official CUDA wheel index is the reliable path.
+# 1) PyTorch con soporte CUDA para la RTX 5060 Ti — instalar ANTES del paso 2
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-# If this stable build still reports "no kernel image is available for execution on the device"
-# on your specific RTX 5060 Ti driver, fall back to the nightly cu128 build:
+
+# Si el build estable aún reporta "no kernel image is available for execution on the device"
+# en tu driver específico, usa el build nightly cu128 como alternativa:
 #   pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
 
-# 3) Everything else for these experiments
+# 2) Resto de dependencias para estos experimentos
 pip install -r requirements-windows.txt
 
-# 4) Your cloned repo itself, editable (uses ultralytics/ from this checkout, not PyPI)
+# 3) Tu propio clon del repo, editable (usa ultralytics/ de este checkout, no de PyPI)
 pip install -e . --no-deps
 ```
 
-`--no-deps` in step 4 avoids pip trying to re-resolve `torch`/`torchvision` against PyPI's default
-(non-CUDA) index after step 2 already installed the correct CUDA build.
+`--no-deps` en el paso 3 evita que pip vuelva a resolver `torch`/`torchvision` contra el índice
+por defecto (no-CUDA) de PyPI después de que el paso 1 ya instaló el build CUDA correcto.
 
-## 4. Dataset structure
-
-VisDrone, re-labeled to a single class, in standard Ultralytics YOLO format (normalized
-`x_center y_center width height` in `[0, 1]`, one `.txt` per image):
+## 5. Estructura de directorios esperada
 
 ```
-nc: 1
-names: ['person']
+GitHub/
+├── YOLOv11/                            ← este repo
+│   ├── requirements-windows.txt
+│   ├── train_yolo11.py
+│   ├── README_EXPERIMENTS.md
+│   ├── .env / .env.example
+│   ├── data/
+│   │   ├── visdrone_base.yaml
+│   │   └── visdrone_augmented.yaml
+│   └── runs/                           ← resultados (en .gitignore)
+└── datasets/                           ← en .gitignore, la puebla el usuario
+    ├── VisDrone_person_base/
+    │   ├── images/{train,val,test}/*.jpg
+    │   └── labels/{train,val,test}/*.txt   # índice de clase siempre 0 ("person")
+    └── VisDrone_person_augmented/
+        ├── images/{train,val,test}/*.jpg   # tu copia con aumentado offline
+        └── labels/{train,val,test}/*.txt
 ```
 
-`data/visdrone_base.yaml` and `data/visdrone_augmented.yaml` use a **bare** `path:` (no `../`),
-matching Ultralytics' own dataset convention (see `ultralytics/cfg/datasets/VisDrone.yaml`).
-Ultralytics resolves a relative `path` against the global `datasets_dir` setting — check it with:
+`data/visdrone_base.yaml` y `data/visdrone_augmented.yaml` usan un `path:` **sin prefijo** (sin
+`../`), igual que la convención propia de Ultralytics (ver
+`ultralytics/cfg/datasets/VisDrone.yaml`): una ruta relativa se resuelve contra el ajuste global
+`datasets_dir`, que por defecto es `<carpeta padre del repo>/datasets` — de ahí el layout de
+arriba. Verifícalo con:
 
 ```powershell
 python -c "from ultralytics import settings; print(settings['datasets_dir'])"
 ```
 
-By default `datasets_dir` is `<parent of this repo checkout>/datasets`, so the two copies are
-expected as siblings of the repo:
+Si tu copia local vive en otro lado, muévela bajo `datasets_dir`, cambia `datasets_dir` con
+`yolo settings datasets_dir=...`, o pon una ruta absoluta en `path:`. Ambos YAML son idénticos
+salvo `path:` — `nc: 1`, `names: [person]` y todos los hiperparámetros son iguales entre los dos
+experimentos.
 
-```
-datasets/
-├── VisDrone_person_base/
-│   ├── images/{train,val,test}
-│   └── labels/{train,val,test}      # class index is always 0 ("person")
-└── VisDrone_person_augmented/
-    ├── images/{train,val,test}      # your offline-augmented copy of the same data
-    └── labels/{train,val,test}
-```
+## 6. Hiperparámetros (idénticos en ambos experimentos)
 
-If your local copy lives elsewhere, either move it under `datasets_dir`, change `datasets_dir` via
-`yolo settings datasets_dir=...`, or set `path:` in the yaml to an absolute path.
+`train_yolo11.py` **no** pasa overrides de `lr0`, `optimizer`, `mosaic`, `mixup`, `fliplr`,
+`hsv_*`, `degrees`, etc. — todos se heredan sin modificar de `ultralytics/cfg/default.yaml`,
+entre ellos:
 
-`data/visdrone_base.yaml` and `data/visdrone_augmented.yaml` differ **only** in `path:` — `nc`,
-`names`, and every training hyperparameter are identical between the two runs, per the requirement
-below.
+| Parámetro | Valor por defecto |
+|---|---|
+| `optimizer` | `auto` |
+| `lr0` / `lrf` | `0.01` / `0.01` |
+| `momentum` | `0.937` |
+| `weight_decay` | `0.0005` |
+| `mosaic` | `1.0` |
+| `mixup` | `0.0` |
+| `fliplr` | `0.5` |
+| `hsv_h/s/v` | `0.015 / 0.7 / 0.4` |
+| `close_mosaic` | `10` (últimas 10 épocas sin mosaic) |
+| `patience` | `100` |
 
-## 5. Hyperparameters held constant across both experiments
+Solo se controlan parámetros de **ejecución/hardware** (no de red): `epochs`, `imgsz`, `batch`,
+`workers`, `amp`, `device` — ver §8.
 
-`train_yolo11.py` passes only execution/hardware settings explicitly (`data`, `model`, `epochs`,
-`imgsz`, `batch`, `device`, `workers`, `amp`, `plots`, `project`, `name`). It does **not** set
-`lr0`, `optimizer`, `mosaic`, `mixup`, `fliplr`, or any other augmentation/optimization parameter —
-those come from `ultralytics/cfg/default.yaml` and are therefore byte-for-byte identical between
-Experiment 1 and Experiment 2, as long as you pass the same
-`--epochs`/`--imgsz`/`--batch`/`--workers` to both commands (the example commands in section 7
-already do this).
+## 7. Credenciales W&B (seguras, sin hardcodear)
 
-- `workers=2` (or `0`) avoids `BrokenPipeError`/`EOFError` from Windows multiprocessing.
-- `amp=True` for mixed precision.
-- `imgsz=1280` for 720p (1280×720) source imagery — YOLO pads/resizes to a square multiple of the
-  model stride, so the larger source dimension (1280) is used rather than 720.
-- `batch=8` at `imgsz=1280` is a conservative starting point for `yolo11l.pt` on 16 GB VRAM (the
-  larger `imgsz` costs much more memory than the `imgsz=640` default); if you hit an out-of-memory
-  error, lower it further, and if you have headroom you can raise it — just use the **same** value
-  for both experiments so the comparison stays valid.
-- `epochs=250` — kept identical across both experiments.
+- `.env.example` (versionado en git, sin secretos reales) documenta las variables requeridas.
+- `.env` (NO versionado, ver `.gitignore`) contiene tu `WANDB_API_KEY` real.
+- `train_yolo11.py` carga `.env` con `python-dotenv` y llama a `wandb.login(key=...)` antes de
+  entrenar; si `WANDB_API_KEY` falta, el script aborta con un mensaje claro en vez de entrenar
+  sin tracking.
+- Cada experimento reporta a su **propio proyecto W&B**, indicado con `--project` en cada corrida
+  (ver §8) — Base y Augmented nunca se mezclan en el mismo proyecto.
 
-## 6. Metrics logged to Weights & Biases
+## 8. Ejecutar ambos entrenamientos (PowerShell)
 
-Tracking uses Ultralytics' **built-in** W&B integration (`ultralytics/utils/callbacks/wb.py`),
-enabled via `settings.update({"wandb": True})` in `train_yolo11.py` — no manual `wandb.log()`
-calls are needed in the training loop. Each run automatically logs, per epoch and at the end of
-training:
-
-- **mAP@0.5** and **mAP@0.5:0.95** (`metrics/mAP50(B)`, `metrics/mAP50-95(B)`)
-- **Precision** and **Recall** (`metrics/precision(B)`, `metrics/recall(B)`)
-- **Box / classification / DFL loss** curves (train and val)
-- **Precision-Recall curve** and **F1-confidence curve** for the `person` class (via
-  `_plot_curve`, logged from `trainer.validator.metrics.curves_results` at `on_train_end`)
-- Final best-weights model artifact
-
-Two metrics named in the original request need a note, since detection models don't natively
-produce them the way classifiers do:
-
-- **IoU**: there's no single scalar "IoU" logged by the trainer; IoU is what mAP is computed
-  *over* — mAP@0.5 = mAP at IoU threshold 0.5, mAP@0.5:0.95 = averaged over IoU 0.5–0.95. That's
-  why both are already tracked above rather than a separate IoU number.
-- **Accuracy**: not a standard object-detection metric (there's no fixed "total" to divide correct
-  predictions by, unlike classification). Precision, Recall, and F1 (derivable from precision/recall
-  per point on the logged PR curve) are the standard substitutes and are already tracked.
-
-Each experiment reports to its **own W&B project** (see the `--project` flags in section 7), so
-Base and Augmented runs never mix in the same project.
-
-## 7. Running both experiments (PowerShell)
+Con el entorno `yolov11` (§3) activado:
 
 ```powershell
-# Copy the credentials template and fill in your real WANDB_API_KEY
+# Copia la plantilla de credenciales y completa tu WANDB_API_KEY real
 Copy-Item .env.example .env
 notepad .env
 
-# Experiment 1 — base dataset
+# Experimento 1 — dataset base
 python train_yolo11.py `
     --data data\visdrone_base.yaml `
     --project VisDrone-YOLO11L-Base `
     --name base_run `
     --epochs 250 --imgsz 1280 --batch 8 --workers 2
 
-# Experiment 2 — offline-augmented dataset (identical hyperparameters, different --data/--project)
+# Experimento 2 — dataset con aumentado offline (mismos hiperparámetros, distinto --data/--project)
 python train_yolo11.py `
     --data data\visdrone_augmented.yaml `
     --project VisDrone-YOLO11L-Augmented `
@@ -184,6 +170,52 @@ python train_yolo11.py `
     --epochs 250 --imgsz 1280 --batch 8 --workers 2
 ```
 
-Results save to `runs\detect\base_run\` and `runs\detect\augmented_run\` respectively (both are
-already git-ignored via the repo's `runs/` rule), and each run streams live to its own W&B
-project.
+Resultados guardados en carpetas independientes: `runs\detect\base_run\` y
+`runs\detect\augmented_run\` (ya cubiertas por la regla `runs/` del `.gitignore`).
+
+> **Resolución de imagen (720p)**: las imágenes fuente son 1280×720. En modo `train`, Ultralytics
+> recibe `imgsz` como un único entero que define el lado largo del letterbox cuadrado (aquí
+> `1280`); el lado corto se rellena (padding) en vez de recortarse o deformarse, así que no se
+> pierde detalle. `batch=8` a `imgsz=1280` es un punto de partida conservador para `yolo11l.pt` en
+> 16 GB de VRAM (subir la resolución de 640 a 1280 cuesta bastante más memoria que el batch en sí);
+> si aparece `OOM` baja `--batch` a `4`, y si sobra VRAM puedes subirlo — solo usa el **mismo**
+> valor en ambos experimentos para que la comparación siga siendo válida.
+
+Si aparece `BrokenPipeError` / `EOFError` (multiprocessing en Windows), baja `--workers` a `0`.
+
+## 9. Métricas registradas en W&B
+
+La integración nativa de Ultralytics (`ultralytics/utils/callbacks/wb.py`), activada vía
+`settings.update({"wandb": True})` en `train_yolo11.py`, ya registra automáticamente por época
+(sin necesidad de llamadas manuales a `wandb.log()`):
+
+- `metrics/precision(B)`, `metrics/recall(B)`
+- `metrics/mAP50(B)`, `metrics/mAP50-95(B)`
+- Pérdidas de entrenamiento y validación: `box_loss`, `cls_loss`, `dfl_loss`
+- Curva Precision-Recall y curva F1-Confidence para la clase `person` (vía `_plot_curve`, tomadas
+  de `trainer.validator.metrics.curves_results` al final del entrenamiento)
+- Artefacto del mejor checkpoint (`best.pt`)
+
+Dos métricas del pedido original necesitan una aclaración, porque detección de objetos no las
+produce de forma nativa como un clasificador:
+
+- **IoU**: no hay un escalar único de "IoU" por época — IoU es lo que mAP mide *sobre*: mAP@0.5 es
+  mAP con umbral de IoU 0.5, mAP@0.5:0.95 es el promedio entre IoU 0.5 y 0.95. Por eso ambas ya se
+  registran arriba en vez de un número de IoU aparte.
+- **Accuracy**: no es una métrica estándar de detección de objetos (no hay un "total" fijo sobre
+  el cual dividir predicciones correctas, a diferencia de clasificación). Precision, Recall y F1
+  (derivable de la curva PR ya registrada) son los sustitutos estándar y ya se registran.
+
+## 10. Verificación de GPU (incluida en el script)
+
+Antes de cada entrenamiento, `train_yolo11.py` imprime y valida:
+
+```python
+torch.cuda.is_available()
+torch.version.cuda
+torch.cuda.get_device_name(0)
+torch.cuda.get_device_capability(0)
+```
+
+Si `torch.cuda.is_available()` es `False`, el script aborta con `RuntimeError` antes de cargar
+credenciales de W&B o el dataset.
