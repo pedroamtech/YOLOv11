@@ -11,15 +11,18 @@ aditivos: no modifican nada bajo `ultralytics/` ni el `requirements.txt` origina
 
 Sigue el orden de las secciones para evitar errores de entorno o de ejecución:
 
-1. **Preparación del entorno** (§1-4): hardware requerido, diferencias entre `requirements.txt`
-   y `requirements-windows.txt`, creación del entorno Anaconda, e instalación manual paso a paso.
-2. **Configuración de parámetros** (§5-7): estructura de directorios y datasets esperada,
-   hiperparámetros que se mantienen idénticos entre los dos experimentos, y credenciales de W&B.
-3. **Ejecución** (§8): los dos comandos de entrenamiento, uno por dataset (base y aumentado).
-4. **Verificación de resultados** (§9-10): qué métricas quedan registradas en W&B y cómo
-   confirmar que la GPU quedó bien configurada antes de entrenar.
+1. **Preparación del entorno** (secciones 1-4): hardware requerido, diferencias entre
+   `requirements.txt` y `requirements-windows.txt`, creación del entorno Anaconda, e instalación
+   manual paso a paso.
+2. **Configuración de parámetros** (secciones 5-7): estructura de directorios y datasets
+   esperada, hiperparámetros que se mantienen idénticos entre los dos experimentos, y
+   credenciales de W&B.
+3. **Ejecución** (sección 8): los dos comandos de entrenamiento, uno por dataset (base y
+   aumentado).
+4. **Verificación de resultados** (secciones 9-10): qué métricas quedan registradas en W&B y
+   cómo confirmar que la GPU quedó bien configurada antes de entrenar.
 
-Si algo falla o los resultados difieren de lo documentado, revisa primero **§2**: ahí están los
+Si algo falla o los resultados difieren de lo documentado, revisa primero la **sección 2**: ahí están los
 dos problemas que ya se diagnosticaron y resolvieron en este mismo hardware (el fallo de `cu124`
 con la RTX 5060 Ti, y el build de `stringzilla` en Windows) antes de asumir que es un problema
 nuevo.
@@ -187,8 +190,9 @@ entre ellos:
 | `patience` | `100` |
 
 Solo se controlan parámetros de **ejecución/hardware** (no de red): `epochs`, `imgsz`, `batch`,
-`workers`, `amp`, `device` — ver §8. Los valores por defecto de `train_yolo11.py` son `imgsz=640`
-(estándar YOLO/Ultralytics), `batch=16` y `workers=8` — ver el razonamiento en §8.
+`workers`, `amp`, `device` — ver la sección 8. Los valores por defecto de `train_yolo11.py` son
+`imgsz=640` (estándar YOLO/Ultralytics), `batch=16` y `workers=8` — ver el razonamiento en la
+sección 8.
 
 ## 7. Credenciales W&B (seguras, sin hardcodear)
 
@@ -206,7 +210,7 @@ Solo se controlan parámetros de **ejecución/hardware** (no de red): `epochs`, 
 
 ## 8. Ejecutar ambos entrenamientos (PowerShell)
 
-Con el entorno `yolov11` (§3) activado:
+Con el entorno `yolov11` (sección 3) activado:
 
 ```powershell
 # Copia la plantilla de credenciales y completa tu WANDB_API_KEY real
