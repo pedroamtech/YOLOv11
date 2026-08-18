@@ -127,9 +127,13 @@ already do this).
 
 - `workers=2` (or `0`) avoids `BrokenPipeError`/`EOFError` from Windows multiprocessing.
 - `amp=True` for mixed precision.
-- `batch=16` at `imgsz=640` is a reasonable starting point for `yolo11l.pt` on 16 GB VRAM; if you
-  hit an out-of-memory error, lower it (e.g. `--batch 8`) — just use the **same** value for both
-  experiments so the comparison stays valid.
+- `imgsz=1280` for 720p (1280×720) source imagery — YOLO pads/resizes to a square multiple of the
+  model stride, so the larger source dimension (1280) is used rather than 720.
+- `batch=8` at `imgsz=1280` is a conservative starting point for `yolo11l.pt` on 16 GB VRAM (the
+  larger `imgsz` costs much more memory than the `imgsz=640` default); if you hit an out-of-memory
+  error, lower it further, and if you have headroom you can raise it — just use the **same** value
+  for both experiments so the comparison stays valid.
+- `epochs=250` — kept identical across both experiments.
 
 ## 6. Metrics logged to Weights & Biases
 
@@ -170,14 +174,14 @@ python train_yolo11.py `
     --data data\visdrone_base.yaml `
     --project VisDrone-YOLO11L-Base `
     --name base_run `
-    --epochs 100 --imgsz 640 --batch 16 --workers 2
+    --epochs 250 --imgsz 1280 --batch 8 --workers 2
 
 # Experiment 2 — offline-augmented dataset (identical hyperparameters, different --data/--project)
 python train_yolo11.py `
     --data data\visdrone_augmented.yaml `
     --project VisDrone-YOLO11L-Augmented `
     --name augmented_run `
-    --epochs 100 --imgsz 640 --batch 16 --workers 2
+    --epochs 250 --imgsz 1280 --batch 8 --workers 2
 ```
 
 Results save to `runs\detect\base_run\` and `runs\detect\augmented_run\` respectively (both are
