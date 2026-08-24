@@ -223,6 +223,11 @@ modificar de `ultralytics/cfg/default.yaml`. Agrupados por categoría:
 | `warmup_bias_lr` | `0.1` |
 | `cos_lr` | `False` (decay lineal, no coseno) |
 
+> Estos son los valores tal cual están en `ultralytics/cfg/default.yaml` — con `optimizer: auto`,
+> varios de ellos se recalculan o se sobreescriben en tiempo de ejecución (`optimizer`, `lr0`,
+> `momentum` efectivo, `warmup_bias_lr`). El detalle completo, con líneas de código exactas, está
+> en la sección 7.
+
 ### 6.2 Función de pérdida
 
 | Parámetro | Valor por defecto |
@@ -277,33 +282,49 @@ Solo controlo parámetros de **ejecución/hardware** (no de red): `epochs`, `img
   `ultralytics/engine/trainer.py:803-836` (`BaseTrainer.setup_model`): cuando `self.model` termina
   en `.pt`, llama a `load_checkpoint(self.model)` y usa esos pesos como punto de partida — no hay
   inicialización aleatoria. `pretrained: True` en `ultralytics/cfg/default.yaml:25` confirma la
-  intención por defecto, y el script no la sobreescribe.
+  intención por defecto, y el script no la sobreescribe. Como VisDrone tiene una sola clase
+  (`person`) contra las 80 de COCO, la cabeza de clasificación no calza 1:1 con el checkpoint —
+  vas a ver estas dos líneas en el log al arrancar cada corrida, generadas por
+  `ultralytics/nn/tasks.py:433` y `:338`:
 
-- **Ninguna capa congelada — fine-tuning completo desde la época 1.** `train_yolo11.py` no pasa
-  `freeze=` a `model.train()`, así que se usa el default de Ultralytics: `freeze: None`
-  (`ultralytics/cfg/default.yaml:39`, "freeze first N layers"), es decir, **todos los parámetros
-  son entrenables desde el inicio**, incluido el backbone. No hay una fase inicial con backbone
-  congelado ni un "unfreeze" progresivo — a diferencia de otros flujos de transfer learning (p.
-  ej. clasificación con `torchvision`, donde congelar el backbone las primeras épocas es común),
-  acá se ajusta la red completa desde el primer paso.
+  ```
+  Overriding model.yaml nc=80 with nc=1
+  Transferred 319/355 items from pretrained weights
+  ```
+
+  (el segundo número es ilustrativo — varía según Nano/Small; lo importante es que **no** dice
+  355/355: la cabeza de clasificación se reinicializa para 1 clase, pero el backbone y el cuello
+  sí se transfieren completos).
+
+- **Casi ninguna capa congelada — fine-tuning general desde la época 1, con una excepción fija
+  por diseño.** `train_yolo11.py` no pasa `freeze=` a `model.train()`, así que se usa el default
+  de Ultralytics: `freeze: None` (`ultralytics/cfg/default.yaml:39`, "freeze first N layers") —
+  no hay una fase inicial con backbone congelado ni un "unfreeze" progresivo, a diferencia de
+  otros flujos de transfer learning (p. ej. clasificación con `torchvision`, donde congelar el
+  backbone las primeras épocas es común). Pero **una capa queda siempre congelada sin importar
+  `freeze=`**: revisé `ultralytics/engine/trainer.py:337` y el módulo `.dfl` (distribution focal
+  loss, la proyección que convierte la distribución de probabilidad de cada borde de caja en una
+  coordenada) está hardcodeado en `always_freeze_names = [".dfl"]` — es una proyección fija por
+  diseño (no tiene sentido entrenarla), así que el resto de la red sí ajusta el 100% de sus
+  parámetros, pero ese módulo puntual no.
 
 - **Hiperparámetros clave del fine-tuning** (ya listados en la sección 6.1; acá el porqué de cada
-  uno en el contexto de partir de pesos preentrenados):
+  uno, y dónde el valor *real* en tiempo de ejecución difiere del que aparece en `default.yaml`
+  por el propio comportamiento de `optimizer: auto`):
 
-  | Parámetro | Valor | Qué significa para el fine-tuning |
+  | Parámetro | Valor en `default.yaml` | Qué pasa realmente con `optimizer: auto` |
   |---|---|---|
-  | `optimizer` | `auto` | Ultralytics elige el optimizador (`AdamW` o `SGD` según el tamaño del dataset y el número de iteraciones estimadas) y ajusta `lr0`/`momentum` en consecuencia — ver `build_optimizer` en `ultralytics/engine/trainer.py` |
-  | `lr0` | `0.01` | Tasa de aprendizaje inicial — el punto de partida del *scheduler*, no la tasa efectiva desde el paso 0 (ver `warmup_epochs` abajo) |
-  | `lrf` | `0.01` | Fracción final: la LR decae hasta `lr0 × lrf = 0.0001` al terminar las 250 épocas |
-  | `cos_lr` | `False` | El *scheduler* decae la LR **linealmente** de `lr0` a `lr0 × lrf`, no con un coseno |
-  | `warmup_epochs` | `3.0` | Las primeras 3 épocas usan *warmup*: la LR sube gradualmente en vez de arrancar de golpe en `lr0`, para no desestabilizar los pesos preentrenados con gradientes grandes al inicio |
-  | `warmup_momentum` | `0.8` | Durante el warmup, el momentum del optimizador también empieza más bajo (`0.8`) y sube hasta `momentum: 0.937` |
-  | `warmup_bias_lr` | `0.1` | Los parámetros de sesgo (`bias`) usan una LR de warmup más alta que el resto de la red, una práctica estándar de Ultralytics para converger más rápido sin desestabilizar los pesos ya entrenados |
+  | `optimizer` | `auto` | Revisé `build_optimizer` en `ultralytics/engine/trainer.py:1094-1122`: con más de 10 000 iteraciones estimadas (`épocas × batches`) resuelve a **`MuSGD`** (Muon-SGD, `lr=0.01, momentum=0.9`); con 10 000 o menos, a **`AdamW`** con `lr0` recalculado (`lr_fit = round(0.002 × 5 / (4 + nc), 6)` — con `nc=1` da `0.002`) y `momentum=0.9`. Esto es distinto de lo que documenta el repo hermano YOLOv12 (`SGD` liso) — esta versión de Ultralytics ya incluye el optimizador Muon |
+  | `lr0` | `0.01` | Solo se usa tal cual si terminás fijando un optimizador explícito (no `auto`); con `auto` se recalcula como se explica arriba |
+  | `lrf` | `0.01` | Fracción final: la LR decae hasta `lr0 × lrf` al terminar las 250 épocas, sobre el `lr0` que haya quedado vigente |
+  | `cos_lr` | `False` | El *scheduler* decae la LR **linealmente**, no con un coseno |
+  | `warmup_epochs` | `3.0` | Sin cambios — las primeras 3 épocas interpolan la LR y el momentum en vez de arrancar de golpe |
+  | `warmup_momentum` | `0.8` | Sin cambios — el momentum de warmup interpola hacia `self.args.momentum` (`ultralytics/engine/trainer.py:483`), que con `optimizer: auto` **se queda en el `0.937` de `default.yaml`**, no en el `0.9` con el que en realidad se construyó el optimizador (`build_optimizer` no reescribe `self.args.momentum`) — un detalle interno de Ultralytics, no algo que dependa de este script |
+  | `warmup_bias_lr` | `0.1` | **Se sobreescribe a `0.0`** en tiempo de ejecución (`ultralytics/engine/trainer.py:1122`, `self.args.warmup_bias_lr = 0.0`) apenas se resuelve `optimizer: auto` — el `0.1` de `default.yaml` nunca llega a aplicarse en las cuatro corridas |
 
-  Esta combinación (fine-tuning completo, sin capas congeladas, warmup de 3 épocas, decaimiento
-  lineal) es la misma en las cuatro corridas — Nano y Small parten de sus respectivos checkpoints
-  de COCO, no de una arquitectura sin entrenar, y ambos ajustan el 100% de sus parámetros contra
-  VisDrone.
+  Esta combinación (fine-tuning general con `.dfl` siempre congelado, warmup de 3 épocas,
+  decaimiento lineal, optimizador auto-resuelto) es la misma en las cuatro corridas — Nano y
+  Small parten de sus respectivos checkpoints de COCO, no de una arquitectura sin entrenar.
 
 ## 8. Credenciales W&B (seguras, sin hardcodear)
 
