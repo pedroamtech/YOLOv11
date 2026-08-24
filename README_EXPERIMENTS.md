@@ -284,17 +284,24 @@ Solo controlo parámetros de **ejecución/hardware** (no de red): `epochs`, `img
   inicialización aleatoria. `pretrained: True` en `ultralytics/cfg/default.yaml:25` confirma la
   intención por defecto, y el script no la sobreescribe. Como VisDrone tiene una sola clase
   (`person`) contra las 80 de COCO, la cabeza de clasificación no calza 1:1 con el checkpoint —
-  vas a ver estas dos líneas en el log al arrancar cada corrida, generadas por
-  `ultralytics/nn/tasks.py:433` y `:338`:
+  vas a ver estas líneas en el log al arrancar cada corrida, generadas por
+  `ultralytics/nn/tasks.py:433`, `:399` y `:338`:
 
   ```
   Overriding model.yaml nc=80 with nc=1
-  Transferred 319/355 items from pretrained weights
+  Remapped 1/1 cls head rows from pretrained weights by class name
+  Transferred 451/499 items from pretrained weights   # yolo11n.pt
+  Transferred 499/499 items from pretrained weights   # yolo11s.pt
   ```
 
-  (el segundo número es ilustrativo — varía según Nano/Small; lo importante es que **no** dice
-  355/355: la cabeza de clasificación se reinicializa para 1 clase, pero el backbone y el cuello
-  sí se transfieren completos).
+  Reproduje esto cargando de verdad `yolo11n.pt`/`yolo11s.pt` y construyendo un modelo `nc=1,
+  names={0: "person"}` a mano (no viene de una corrida real de `train_yolo11.py` con dataset, así
+  que los números exactos podrían variar levemente en una corrida real — pero el mecanismo sí está
+  confirmado). El punto importante es que **no** se reinicializa la cabeza de clasificación al
+  azar: como `"person"` es la clase `0` en COCO, `ultralytics/nn/tasks.py:340-399`
+  (`_remap_cls_by_names`) copia esa fila específica del checkpoint por nombre de clase antes de la
+  transferencia genérica — solo se pierde lo que no tiene equivalente en el checkpoint de COCO
+  (el resto de las 79 clases que ya no existen en la cabeza de 1 clase).
 
 - **Casi ninguna capa congelada — fine-tuning general desde la época 1, con una excepción fija
   por diseño.** `train_yolo11.py` no pasa `freeze=` a `model.train()`, así que se usa el default
@@ -314,8 +321,8 @@ Solo controlo parámetros de **ejecución/hardware** (no de red): `epochs`, `img
 
   | Parámetro | Valor en `default.yaml` | Qué pasa realmente con `optimizer: auto` |
   |---|---|---|
-  | `optimizer` | `auto` | Revisé `build_optimizer` en `ultralytics/engine/trainer.py:1094-1122`: con más de 10 000 iteraciones estimadas (`épocas × batches`) resuelve a **`MuSGD`** (Muon-SGD, `lr=0.01, momentum=0.9`); con 10 000 o menos, a **`AdamW`** con `lr0` recalculado (`lr_fit = round(0.002 × 5 / (4 + nc), 6)` — con `nc=1` da `0.002`) y `momentum=0.9`. Esto es distinto de lo que documenta el repo hermano YOLOv12 (`SGD` liso) — esta versión de Ultralytics ya incluye el optimizador Muon |
-  | `lr0` | `0.01` | Solo se usa tal cual si terminás fijando un optimizador explícito (no `auto`); con `auto` se recalcula como se explica arriba |
+  | `optimizer` | `auto` | Revisé `build_optimizer` en `ultralytics/engine/trainer.py:1094-1122`: `iterations = ceil(len(dataset_train) / max(batch, nbs)) × epochs` (`trainer.py:299`), con `nbs=64` por defecto — como usamos `--batch 16` (menor que 64), el divisor real es **64**, no el `--batch` real. Con más de 10 000 iteraciones así calculadas resuelve a **`MuSGD`** (Muon-SGD, `lr=0.01, momentum=0.9`); con 10 000 o menos, a **`AdamW`** con `lr0` recalculado (`lr_fit = round(0.002 × 5 / (4 + nc), 6)` — con `nc=1` da `0.002`) y `momentum=0.9`. Esto es distinto de lo que documenta el repo hermano YOLOv12 (`SGD` liso) — esta versión de Ultralytics ya incluye el optimizador Muon |
+  | `lr0` | `0.01` | Solo cambia de verdad en la rama `AdamW` (pasa a `lr_fit`, p. ej. `0.002` con `nc=1`); en la rama `MuSGD` el valor recalculado es `0.01`, el mismo número que ya trae `default.yaml`, así que ahí no hay cambio observable aunque técnicamente se vuelva a calcular |
   | `lrf` | `0.01` | Fracción final: la LR decae hasta `lr0 × lrf` al terminar las 250 épocas, sobre el `lr0` que haya quedado vigente |
   | `cos_lr` | `False` | El *scheduler* decae la LR **linealmente**, no con un coseno |
   | `warmup_epochs` | `3.0` | Sin cambios — las primeras 3 épocas interpolan la LR y el momentum en vez de arrancar de golpe |
