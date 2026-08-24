@@ -1,11 +1,14 @@
-# VisDrone (person) — Experimentos de entrenamiento YOLO11m en Windows
+# VisDrone (person) — Experimentos de entrenamiento YOLO11 Nano/Small en Windows
 
-Configuración local de entrenamiento en Windows para `yolo11m.pt` sobre VisDrone reducido a una
-sola clase ("person"), comparando un dataset base contra una copia con aumentado offline, con
-seguimiento en Weights & Biases. Estos archivos viven en la raíz del repo (mismo esquema que el
-repo hermano [YOLOv12](https://github.com/pedroamtech/YOLOv12): `train_yolo12.py`,
-`requirements-windows.txt`, `README_EXPERIMENTS.md`, `.env`/`.env.example`, `data/*.yaml`) y son
-aditivos: no modifican nada bajo `ultralytics/` ni el `requirements.txt` original.
+Documento esta guía como mantenedor de este pipeline de entrenamiento: acá dejo todo lo necesario
+para reproducir, sin adivinar nada, el entrenamiento local en Windows de **YOLO11 Nano
+(`yolo11n.pt`)** y **YOLO11 Small (`yolo11s.pt`)** sobre VisDrone reducido a una sola clase
+("person"), comparando en cada tamaño de modelo un dataset base contra una copia con aumentado
+offline — 4 corridas en total, con seguimiento en Weights & Biases. Estos archivos viven en la
+raíz del repo (mismo esquema que el repo hermano
+[YOLOv12](https://github.com/pedroamtech/YOLOv12): `train_yolo12.py`, `requirements-windows.txt`,
+`README_EXPERIMENTS.md`, `.env`/`.env.example`, `data/*.yaml`) y son aditivos: no toco nada bajo
+`ultralytics/` ni el `requirements.txt` original.
 
 ## Cómo usar esta guía
 
@@ -15,17 +18,17 @@ Sigue el orden de las secciones para evitar errores de entorno o de ejecución:
    `requirements.txt` y `requirements-windows.txt`, creación del entorno Anaconda, e instalación
    manual paso a paso.
 2. **Configuración de parámetros** (secciones 5-7): estructura de directorios y datasets
-   esperada, hiperparámetros que se mantienen idénticos entre los dos experimentos, y
-   credenciales de W&B.
-3. **Ejecución** (sección 8): los dos comandos de entrenamiento, uno por dataset (base y
-   aumentado).
+   esperada, hiperparámetros que se mantienen idénticos entre las 4 corridas, y credenciales de
+   W&B.
+3. **Ejecución** (sección 8): los 4 comandos de entrenamiento (Nano y Small, cada uno sobre el
+   dataset base y el aumentado).
 4. **Verificación de resultados** (secciones 9-10): qué métricas quedan registradas en W&B y
    cómo confirmar que la GPU quedó bien configurada antes de entrenar.
 
-Si algo falla o los resultados difieren de lo documentado, revisa primero la **sección 2**: ahí están los
-dos problemas que ya se diagnosticaron y resolvieron en este mismo hardware (el fallo de `cu124`
-con la RTX 5060 Ti, y el build de `stringzilla` en Windows) antes de asumir que es un problema
-nuevo.
+Si algo falla o los resultados difieren de lo documentado, revisa primero la **sección 2**: ahí
+dejo documentados los dos problemas que ya diagnostiqué y resolví en este mismo hardware (el
+fallo de `cu124` con la RTX 5060 Ti, y el build de `stringzilla` en Windows) antes de asumir que
+es un problema nuevo.
 
 ## 1. Hardware y entorno
 
@@ -35,7 +38,12 @@ nuevo.
 | GPU | NVIDIA GeForce RTX 5060 Ti, 16 GB VRAM (Blackwell, compute capability sm_120) |
 | CUDA Toolkit / driver | 13.3 |
 | Framework | PyTorch con soporte CUDA |
-| Modelo | YOLO11 Medium (`yolo11m.pt`), arquitectura C3k2/C2PSA — se eligió Medium en vez de Large por menor requerimiento de cómputo/VRAM |
+| Modelos | YOLO11 Nano (`yolo11n.pt`, 2.6M parámetros) y YOLO11 Small (`yolo11s.pt`, 9.4M parámetros), arquitectura C3k2/C2PSA |
+
+Elegí Nano y Small — no Medium (20.1M parámetros) ni Large (25.3M) — porque el objetivo de este
+pipeline es entrenar rápido con poco cómputo: Small ya multiplica por ~3.6x el costo en FLOPs de
+Nano (21.5 GFLOPs vs. 6.5 GFLOPs a 640px), así que comparar ambos también sirve como referencia
+directa de cuánto mAP ganas por cada punto extra de cómputo, antes de considerar subir a Medium.
 
 ## 2. Diferencias: `requirements.txt` (original) vs `requirements-windows.txt` (nuevo)
 
@@ -43,11 +51,11 @@ Este repo no versiona un `requirements.txt` en la raíz (está en `.gitignore`; 
 viven en `pyproject.toml`). `requirements-windows.txt` es una lista **independiente, de
 instalación manual**, solo para estos experimentos:
 
-- **PyTorch se instala aparte, primero, desde el índice de wheels CUDA** — ver la corrección de
+- **Instala PyTorch aparte, primero, desde el índice de wheels CUDA** — ver la corrección de
   abajo.
-- **No había paquetes exclusivos de Linux que quitar.** Las dependencias base de este
+- **No hubo paquetes exclusivos de Linux que quitar.** Las dependencias base de este
   `pyproject.toml` no incluyen `triton` ni `flash-attn` (a diferencia del repo hermano YOLOv12,
-  donde sí aparecían como extras y se retiraron). `requirements-windows.txt` es entonces el set
+  donde sí aparecían como extras y los retiré ahí). `requirements-windows.txt` es entonces el set
   de runtime seguro para Windows más dos añadidos: `wandb` y `python-dotenv`, para el tracking
   con credenciales.
 - **Corrección sobre el índice `cu124` originalmente solicitado:** los wheels `cu124` de PyTorch
@@ -58,7 +66,7 @@ instalación manual**, solo para estos experimentos:
   falta que exista), sino un wheel que sí incluya kernels `sm_120`: **`cu128`** (PyTorch ≥2.7).
   Comando exacto en la sección 4.
 
-  **Verificado en hardware real** (2026-08-17): se reprodujo el fallo exacto con `torch
+  **Verifiqué esto en hardware real** (2026-08-17): reproduje el fallo exacto con `torch
   2.6.0+cu124` — `torch.cuda.is_available()` devolvía `True`, pero `torch.randn(4,4).cuda() @ ...`
   lanzaba `RuntimeError: CUDA error: no kernel image is available for execution on the device`,
   con la advertencia previa de PyTorch listando soporte hasta `sm_90` (no incluye `sm_120`).
@@ -75,15 +83,15 @@ instalación manual**, solo para estos experimentos:
 > para Windows** en PyPI (los últimos `win_amd64` disponibles son de la serie
 > 1.2.x, por debajo del mínimo que pide `albucore`), así que `pip` intenta
 > compilarlo desde el código fuente y falla sin el compilador de Microsoft
-> C++. Es el mismo problema documentado en el repo hermano
+> C++. Es el mismo problema que documenté en el repo hermano
 > [YOLOv12](https://github.com/pedroamtech/YOLOv12/blob/main/README_EXPERIMENTS.md#2-diferencias-requirementstxt-original-vs-requirements-windowstxt-nuevo) —
-> no es específico de `yolo11l.pt` ni de `yolo12l.pt`, es una limitación del
-> paquete `stringzilla` en Windows que afecta a cualquier modelo de
-> Ultralytics que termine dependiendo de `albumentations`.
+> no es específico de ningún tamaño de modelo, es una limitación del paquete
+> `stringzilla` en Windows que afecta a cualquier modelo de Ultralytics que
+> termine dependiendo de `albumentations`.
 >
-> **Fix (verificado)**: instalar *Build Tools for Visual Studio*
-> (https://visualstudio.microsoft.com/visual-cpp-build-tools/) **no basta por
-> sí solo** — el instalador base no incluye el compilador de C++. Abre
+> **Fix (verificado)**: instala *Build Tools for Visual Studio*
+> (https://visualstudio.microsoft.com/visual-cpp-build-tools/) — pero eso **no basta por
+> sí solo**, el instalador base no incluye el compilador de C++. Abre
 > **"Visual Studio Installer"**, elige **Modificar** sobre "Visual Studio
 > Build Tools", y en la pestaña *Workloads* marca explícitamente **"Desktop
 > development with C++"** (trae MSVC v143 + Windows SDK). Sin ese workload
@@ -96,30 +104,33 @@ instalación manual**, solo para estos experimentos:
 
 ## 3. Creación del entorno virtual (Anaconda)
 
+Crea y activa el entorno antes de instalar nada:
+
 ```powershell
 conda create -n yolov11 python=3.11 -y
 conda activate yolov11
 python -m pip install --upgrade pip
 ```
 
-`python=3.11` coincide con el piso de soporte activo de este repo y tiene buena cobertura de
-wheels precompilados para `torch`/`onnxruntime`. Verifica que el intérprete correcto esté activo:
+Usé `python=3.11` porque coincide con el piso de soporte activo de este repo y tiene buena
+cobertura de wheels precompilados para `torch`/`onnxruntime`. Verifica que el intérprete correcto
+esté activo antes de seguir:
 
 ```powershell
 where.exe python   # debe apuntar dentro de \Anaconda3\envs\yolov11\ o \Miniconda3\envs\yolov11\
 ```
 
-Para desmontarlo después: `conda deactivate` y luego `conda env remove -n yolov11`.
+Para desmontar el entorno más adelante: `conda deactivate` y luego `conda env remove -n yolov11`.
 
 ## 4. Instalación manual en Windows (ningún script automático)
 
-Con el entorno `yolov11` activado (sección 3):
+Con el entorno `yolov11` activado (sección 3), instala en este orden exacto:
 
 ```powershell
-# 1) PyTorch con soporte CUDA para la RTX 5060 Ti — instalar ANTES del paso 2
+# 1) PyTorch con soporte CUDA para la RTX 5060 Ti — instala esto ANTES del paso 2
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
-# Si el build estable aún reporta "no kernel image is available for execution on the device"
+# Si el build estable sigue reportando "no kernel image is available for execution on the device"
 # en tu driver específico, usa el build nightly cu128 como alternativa:
 #   pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
 
@@ -130,10 +141,13 @@ pip install -r requirements-windows.txt
 pip install -e . --no-deps
 ```
 
-`--no-deps` en el paso 3 evita que pip vuelva a resolver `torch`/`torchvision` contra el índice
-por defecto (no-CUDA) de PyPI después de que el paso 1 ya instaló el build CUDA correcto.
+Uso `--no-deps` en el paso 3 para evitar que pip vuelva a resolver `torch`/`torchvision` contra
+el índice por defecto (no-CUDA) de PyPI después de que el paso 1 ya instaló el build CUDA
+correcto.
 
 ## 5. Estructura de directorios esperada
+
+Organizo el repo y los datasets así:
 
 ```
 GitHub/
@@ -167,10 +181,10 @@ python -c "from ultralytics import settings; print(settings['datasets_dir'])"
 
 Si tu copia local vive en otro lado, muévela bajo `datasets_dir`, cambia `datasets_dir` con
 `yolo settings datasets_dir=...`, o pon una ruta absoluta en `path:`. Ambos YAML son idénticos
-salvo `path:` — `nc: 1`, `names: [person]` y todos los hiperparámetros son iguales entre los dos
-experimentos.
+salvo `path:` — `nc: 1`, `names: [person]` y todos los hiperparámetros son iguales en las 4
+corridas, sin importar el tamaño de modelo.
 
-## 6. Hiperparámetros (idénticos en ambos experimentos)
+## 6. Hiperparámetros (idénticos en las 4 corridas)
 
 `train_yolo11.py` **no** pasa overrides de `lr0`, `optimizer`, `mosaic`, `mixup`, `fliplr`,
 `hsv_*`, `degrees`, etc. — todos se heredan sin modificar de `ultralytics/cfg/default.yaml`,
@@ -189,10 +203,10 @@ entre ellos:
 | `close_mosaic` | `10` (últimas 10 épocas sin mosaic) |
 | `patience` | `100` |
 
-Solo se controlan parámetros de **ejecución/hardware** (no de red): `epochs`, `imgsz`, `batch`,
+Solo controlo parámetros de **ejecución/hardware** (no de red): `epochs`, `imgsz`, `batch`,
 `workers`, `amp`, `device` — ver la sección 8. Los valores por defecto de `train_yolo11.py` son
-`imgsz=640` (estándar YOLO/Ultralytics), `batch=16` y `workers=8` — ver el razonamiento en la
-sección 8.
+`imgsz=640` (estándar YOLO/Ultralytics), `batch=16` y `workers=8`, y se mantienen fijos en las 4
+corridas — solo cambian `--model` y `--data` entre ellas.
 
 ## 7. Credenciales W&B (seguras, sin hardcodear)
 
@@ -201,71 +215,87 @@ sección 8.
 - `train_yolo11.py` carga `.env` con `python-dotenv` y llama a `wandb.login(key=...)` antes de
   entrenar; si `WANDB_API_KEY` falta, el script aborta con un mensaje claro en vez de entrenar
   sin tracking.
-- Ambos experimentos reportan al **mismo proyecto W&B** (uno ya creado por ti, ej. `YOLOv11`) —
-  se distinguen por `--name` (`base_run` / `augmented_run`), no creando un proyecto nuevo por
-  corrida. `train_yolo11.py` llama a `wandb.init(project=..., name=...)` **antes** de
-  `model.train()`, así que el callback nativo `wb.py` de Ultralytics detecta el run ya activo
-  (`if not wb.run:`) y reutiliza ese mismo proyecto en vez de crear uno propio a partir de la
-  carpeta local de resultados.
+- Las 4 corridas reportan al **mismo proyecto W&B** (uno ya creado por ti, ej. `YOLOv11`) — se
+  distinguen por `--name` (`nano_base` / `nano_augmented` / `small_base` / `small_augmented`), no
+  creando un proyecto nuevo por corrida. Para lograrlo, `train_yolo11.py` llama a
+  `wandb.init(project=..., name=...)` **antes** de `model.train()`, así que el callback nativo
+  `wb.py` de Ultralytics detecta el run ya activo (`if not wb.run:`) y lo reutiliza en vez de
+  crear un proyecto propio a partir de la carpeta local de resultados.
 
-## 8. Ejecutar ambos entrenamientos (PowerShell)
+## 8. Ejecutar las 4 corridas (PowerShell)
 
-Con el entorno `yolov11` (sección 3) activado:
+Con el entorno `yolov11` (sección 3) activado, esta es la matriz completa: 2 tamaños de modelo x
+2 datasets, mismos hiperparámetros en las 4:
 
 ```powershell
 # Copia la plantilla de credenciales y completa tu WANDB_API_KEY real
 Copy-Item .env.example .env
 notepad .env
 
-# Experimento 1 — dataset base
+# Nano — dataset base
 python train_yolo11.py `
-    --data data\visdrone_base.yaml `
-    --name base_run `
+    --model yolo11n.pt --data data\visdrone_base.yaml `
+    --name nano_base `
     --epochs 250 --imgsz 640 --batch 16 --workers 8
 
-# Experimento 2 — dataset con aumentado offline (mismos hiperparámetros, distinto --data/--name)
+# Nano — dataset con aumentado offline
 python train_yolo11.py `
-    --data data\visdrone_augmented.yaml `
-    --name augmented_run `
+    --model yolo11n.pt --data data\visdrone_augmented.yaml `
+    --name nano_augmented `
+    --epochs 250 --imgsz 640 --batch 16 --workers 8
+
+# Small — dataset base
+python train_yolo11.py `
+    --model yolo11s.pt --data data\visdrone_base.yaml `
+    --name small_base `
+    --epochs 250 --imgsz 640 --batch 16 --workers 8
+
+# Small — dataset con aumentado offline
+python train_yolo11.py `
+    --model yolo11s.pt --data data\visdrone_augmented.yaml `
+    --name small_augmented `
     --epochs 250 --imgsz 640 --batch 16 --workers 8
 ```
 
-Ambas corridas usan `WANDB_PROJECT=YOLOv11` desde `.env` (o pasa `--project <tu-proyecto>` para
-sobreescribirlo). Resultados locales guardados en carpetas independientes: `runs\detect\base_run\`
-y `runs\detect\augmented_run\` (ya cubiertas por la regla `runs/` del `.gitignore`) — separados de
-a qué proyecto de W&B reportan.
+Las 4 corridas usan `WANDB_PROJECT=YOLOv11` desde `.env` (o pasa `--project <tu-proyecto>` para
+sobreescribirlo). Guardo los resultados locales en carpetas independientes:
+`runs\detect\nano_base\`, `runs\detect\nano_augmented\`, `runs\detect\small_base\` y
+`runs\detect\small_augmented\` (ya cubiertas por la regla `runs/` del `.gitignore`) — separadas
+de a qué proyecto de W&B reportan.
 
 > **Por qué estos valores (`imgsz=640`, `batch=16`, `workers=8`)**: `imgsz=640` es el estándar
 > YOLO/Ultralytics (`ultralytics/cfg/default.yaml`). `batch=16` es un punto de partida razonable
-> — a 640px hay mucho más margen de VRAM que a 1280px (donde `batch=8` ya daba OOM en pruebas
-> anteriores); no está verificado aún específicamente en este dataset, así que si aparece `OOM`
-> baja `--batch`, y si sobra VRAM puedes subirlo — solo usa el **mismo** valor en ambos
-> experimentos para que la comparación siga siendo válida. `workers=8` no cambia: ya estaba bien
-> dimensionado para tu CPU de 24 hilos, independientemente de la resolución; solo baja a `0` si
-> aparece `BrokenPipeError`/`EOFError` por multiprocessing en Windows.
+> para Nano y Small a 640px en 16 GB de VRAM — ambos son mucho más ligeros que Medium/Large
+> (Nano: 2.6M parámetros / 6.5 GFLOPs; Small: 9.4M / 21.5 GFLOPs a 640px), así que no debería
+> costar acercarse a un OOM; de todas formas no lo tengo verificado aún específicamente en este
+> dataset, así que si aparece `OOM` baja `--batch`, y si sobra VRAM puedes subirlo — usa siempre
+> el **mismo** valor en las 4 corridas para que la comparación siga siendo válida. `workers=8` es
+> el valor por defecto de Ultralytics, y ya está bien dimensionado para una CPU de 24 hilos
+> independientemente de la resolución o el tamaño de modelo; solo bájalo a `0` si te aparece
+> `BrokenPipeError`/`EOFError` por multiprocessing en Windows.
 
 ## 9. Métricas registradas en W&B
 
-La integración nativa de Ultralytics (`ultralytics/utils/callbacks/wb.py`), activada vía
+La integración nativa de Ultralytics (`ultralytics/utils/callbacks/wb.py`), que activo vía
 `settings.update({"wandb": True})` en `train_yolo11.py`, ya registra automáticamente por época
 (sin necesidad de llamadas manuales a `wandb.log()`):
 
 - `metrics/precision(B)`, `metrics/recall(B)`
 - `metrics/mAP50(B)`, `metrics/mAP50-95(B)`
 - Pérdidas de entrenamiento y validación: `box_loss`, `cls_loss`, `dfl_loss`
-- Curva Precision-Recall y curva F1-Confidence para la clase `person` (vía `_plot_curve`, tomadas
-  de `trainer.validator.metrics.curves_results` al final del entrenamiento)
+- Curva Precision-Recall y curva F1-Confidence para la clase `person` (vía `_plot_curve`, que
+  toma `trainer.validator.metrics.curves_results` al final del entrenamiento)
 - Artefacto del mejor checkpoint (`best.pt`)
 
 Dos métricas del pedido original necesitan una aclaración, porque detección de objetos no las
 produce de forma nativa como un clasificador:
 
 - **IoU**: no hay un escalar único de "IoU" por época — IoU es lo que mAP mide *sobre*: mAP@0.5 es
-  mAP con umbral de IoU 0.5, mAP@0.5:0.95 es el promedio entre IoU 0.5 y 0.95. Por eso ambas ya se
-  registran arriba en vez de un número de IoU aparte.
+  mAP con umbral de IoU 0.5, mAP@0.5:0.95 es el promedio entre IoU 0.5 y 0.95. Por eso ambas ya
+  quedan registradas arriba en vez de un número de IoU aparte.
 - **Accuracy**: no es una métrica estándar de detección de objetos (no hay un "total" fijo sobre
   el cual dividir predicciones correctas, a diferencia de clasificación). Precision, Recall y F1
-  (derivable de la curva PR ya registrada) son los sustitutos estándar y ya se registran.
+  (derivable de la curva PR ya registrada) son los sustitutos estándar y ya quedan registrados.
 
 ## 10. Verificación de GPU (incluida en el script)
 
@@ -280,3 +310,16 @@ torch.cuda.get_device_capability(0)
 
 Si `torch.cuda.is_available()` es `False`, el script aborta con `RuntimeError` antes de cargar
 credenciales de W&B o el dataset.
+
+> **No es un error, es el chequeo de AMP**: justo después, ya con `amp=True` (fijo en el
+> script), Ultralytics corre su propio chequeo automático de precisión mixta
+> (`ultralytics/engine/trainer.py:359-363` llamando a `check_amp()` en
+> `ultralytics/utils/checks.py:976`) antes de cada una de las 4 corridas. Ese chequeo descarga y
+> corre inferencia FP32 vs. FP16 sobre un modelo nano de referencia — en esta versión del repo es
+> **`yolo26n.pt`** (`ultralytics/utils/checks.py:1030`), no `yolo11n.pt` ni el `--model` que le
+> pasaste — para confirmar que AMP no produce NaN o mAP en cero en tu GPU. Es independiente de
+> `--model`: pasa igual entrenando Nano o Small, y tu modelo real es el que sí se usa para
+> entrenar. El mensaje `AMP: running Automatic Mixed Precision (AMP) checks... ✅` en el log es
+> justo este paso. Se descarga una sola vez y queda cacheado en la carpeta desde donde corres el
+> script; si se repite en cada corrida, revisa que estés lanzando `train_yolo11.py` siempre desde
+> el mismo directorio.

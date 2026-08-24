@@ -1,17 +1,14 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
-"""Train YOLO11m on VisDrone (single 'person' class) on Windows, tracked in Weights & Biases.
+"""Train YOLO11 (Nano/Small) on VisDrone (single 'person' class) on Windows, tracked in W&B.
 
-Usage (PowerShell, from the repo root):
-    python train_yolo11.py `
-        --data data\visdrone_base.yaml `
-        --name base_run
+Usage (PowerShell, from the repo root) — 4 runs: {nano, small} x {base, augmented}:
+    python train_yolo11.py --model yolo11n.pt --data data\visdrone_base.yaml       --name nano_base
+    python train_yolo11.py --model yolo11n.pt --data data\visdrone_augmented.yaml  --name nano_augmented
+    python train_yolo11.py --model yolo11s.pt --data data\visdrone_base.yaml       --name small_base
+    python train_yolo11.py --model yolo11s.pt --data data\visdrone_augmented.yaml  --name small_augmented
 
-    python train_yolo11.py `
-        --data data\visdrone_augmented.yaml `
-        --name augmented_run
-
-Both commands above pass identical --epochs/--imgsz/--batch/--workers so the two experiments stay
-comparable; only --data (and therefore --name) differs. Both runs report to the SAME W&B project
+All 4 commands pass identical --epochs/--imgsz/--batch/--workers so the 4 runs stay comparable;
+only --model and --data (and therefore --name) differ. All 4 runs report to the SAME W&B project
 (--project / WANDB_PROJECT, e.g. an existing "YOLOv11" project) and are told apart by --name, not
 by separate auto-created projects. See README_EXPERIMENTS.md.
 """
@@ -25,23 +22,27 @@ from dotenv import load_dotenv
 
 def parse_args():
     """Parse command-line arguments for a single training run."""
-    parser = argparse.ArgumentParser(description="Train YOLO11m on VisDrone (Windows, RTX 5060 Ti, 16GB VRAM)")
+    parser = argparse.ArgumentParser(description="Train YOLO11 Nano/Small on VisDrone (Windows, RTX 5060 Ti, 16GB VRAM)")
     parser.add_argument("--data", type=str, required=True, help="Path to visdrone_base.yaml or visdrone_augmented.yaml")
-    parser.add_argument("--model", type=str, default="yolo11m.pt", help="Checkpoint to fine-tune from")
+    parser.add_argument(
+        "--model", type=str, default="yolo11n.pt", help="Checkpoint to fine-tune from: yolo11n.pt (Nano) or yolo11s.pt (Small)"
+    )
     parser.add_argument(
         "--project", type=str, default=None, help="W&B project name (single, shared); overrides WANDB_PROJECT from .env"
     )
-    parser.add_argument("--name", type=str, required=True, help="Run name, e.g. base_run / augmented_run")
-    parser.add_argument("--epochs", type=int, default=250, help="Keep identical across both experiments")
     parser.add_argument(
-        "--imgsz", type=int, default=640, help="Ultralytics/YOLO standard. Keep identical across both experiments."
+        "--name", type=str, required=True, help="Run name, e.g. nano_base / nano_augmented / small_base / small_augmented"
+    )
+    parser.add_argument("--epochs", type=int, default=250, help="Keep identical across all 4 runs")
+    parser.add_argument(
+        "--imgsz", type=int, default=640, help="Ultralytics/YOLO standard. Keep identical across all 4 runs."
     )
     parser.add_argument(
         "--batch",
         type=int,
         default=16,
-        help="At 640px there's much more VRAM headroom than at 1280px (where 8 already OOM'd) — a reasonable "
-        "starting point, not yet verified on this dataset. Keep identical across both experiments.",
+        help="Reasonable starting point for Nano/Small at 640px on 16GB VRAM, not yet verified on this dataset. "
+        "Keep identical across all 4 runs.",
     )
     parser.add_argument(
         "--workers",
@@ -67,7 +68,7 @@ def verify_gpu():
 
 
 def main():
-    """Load credentials from .env, verify the GPU, and run one YOLO11l training on VisDrone."""
+    """Load credentials from .env, verify the GPU, and run one YOLO11 (Nano/Small) training on VisDrone."""
     args = parse_args()
     load_dotenv()  # reads .env from the current working directory (repo root)
 
@@ -109,7 +110,7 @@ def main():
         # No `project=` here: leaving it unset keeps local results under runs/detect/<name>,
         # independent from the W&B project set above via wandb.init().
         # No other hyperparameter is set here: optimizer, lr0, mosaic, mixup, fliplr, etc. all come
-        # from ultralytics/cfg/default.yaml so Experiment 1 and Experiment 2 remain comparable.
+        # from ultralytics/cfg/default.yaml so all 4 runs (Nano/Small x base/augmented) stay comparable.
     )
 
 
