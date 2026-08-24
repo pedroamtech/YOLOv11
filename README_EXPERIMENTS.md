@@ -168,7 +168,6 @@ python -c "from ultralytics import settings; print(settings['datasets_dir'])"
 ```
 GitHub/
 ├── YOLOv11/                            ← este repo clonado
-│   ├── requirements.txt                (original, sin tocar)
 │   ├── requirements-windows.txt        (nuevo)
 │   ├── train_yolo11.py                 (nuevo)
 │   ├── README_EXPERIMENTS.md           (este archivo)
@@ -182,7 +181,7 @@ GitHub/
 │           ├── nano_augmented/
 │           ├── small_base/
 │           └── small_augmented/
-└── datasets/                           ← gitignored, la puebla el usuario
+└── datasets/                           ← fuera del repo, no versionado, la puebla el usuario
     ├── VisDrone_person_base/
     │   ├── images/{train,val,test}/*.jpg
     │   └── labels/{train,val,test}/*.txt   # índice de clase siempre 0 ("person")

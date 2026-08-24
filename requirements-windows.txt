@@ -1,5 +1,6 @@
 # Windows manual install list for the VisDrone / YOLO11 Nano+Small (yolo11n.pt / yolo11s.pt) experiments.
-# This file is INDEPENDENT from the repo's root requirements.txt and does not replace it.
+# This repo does not track a root requirements.txt (dependencies live in pyproject.toml); this
+# file is an INDEPENDENT, manual-install-only list, just for these experiments.
 #
 # IMPORTANT — install order matters:
 #   1) Install PyTorch FIRST, from the CUDA wheel index (command below, NOT from this file).
