@@ -1,8 +1,8 @@
 # YOLO11 Nano/Small sobre VisDrone (Windows) — Documentación de experimentos
 
-Documento acá el flujo de entrenamiento local en Windows que armé para `yolo11n.pt`/
+Este documento describe el flujo de entrenamiento local en Windows que armé para `yolo11n.pt`/
 `yolo11s.pt` sobre un dataset VisDrone de clase única (`person`), con tracking en Weights &
-Biases. No toco `requirements.txt` ni ningún archivo del paquete `ultralytics/` original.
+Biases. No modifica `requirements.txt` ni ningún archivo del paquete `ultralytics/` original.
 
 > **Alcance actual: solo Nano y Small.** Empecé con `yolo11l.pt` (Large) — exigía demasiado
 > cómputo/VRAM para este flujo — pasé a `yolo11m.pt` (Medium), y finalmente recorté el alcance del
@@ -57,7 +57,7 @@ Sigue este orden para reproducir el experimento sin errores:
 ## 2. Diferencias: `requirements.txt` (original) vs `requirements-windows.txt` (nuevo)
 
 Este repo no versiona un `requirements.txt` en la raíz (está en `.gitignore`; las dependencias
-viven en `pyproject.toml`). Armé `requirements-windows.txt` como una lista **independiente, de
+viven en `pyproject.toml`). `requirements-windows.txt` es una lista **independiente, de
 instalación manual**, solo para estos experimentos:
 
 | Paquete | Situación en `pyproject.toml` | `requirements-windows.txt` | Motivo |
@@ -123,8 +123,8 @@ where.exe python
 > `where.exe python` debe apuntar a una ruta dentro de `...\anaconda3\envs\yolov11\python.exe` (o
 > `...\miniconda3\envs\...`). Si apunta al Python global del sistema, el entorno no está activado.
 
-Desactivalo al terminar la sesión con `conda deactivate`, y eliminalo por completo (para
-reinstalar desde cero) con `conda env remove -n yolov11`.
+Para desactivar el entorno al terminar la sesión: `conda deactivate`. Para eliminarlo por
+completo (reinstalación desde cero): `conda env remove -n yolov11`.
 
 ## 4. Instalación manual en Windows (ningún script automático)
 
@@ -156,8 +156,8 @@ pip install -e . --no-deps
 
 ## 5. Estructura de directorios esperada
 
-Configuré `data/visdrone_base.yaml` y `data/visdrone_augmented.yaml` con un `path:` **sin
-prefijo** (sin `../`), igual que la convención propia de Ultralytics (ver
+`data/visdrone_base.yaml` y `data/visdrone_augmented.yaml` usan un `path:` **sin prefijo** (sin
+`../`), igual que la convención propia de Ultralytics (ver
 `ultralytics/cfg/datasets/VisDrone.yaml`): una ruta relativa se resuelve contra el ajuste global
 `datasets_dir`, que por defecto es `<carpeta padre del repo clonado>/datasets`. Verifícalo con:
 
@@ -206,8 +206,8 @@ convención), tienes tres opciones: muévela bajo `datasets_dir`, cambia `datase
 
 ## 6. Hiperparámetros (idénticos en las cuatro corridas)
 
-No paso overrides de ningún hiperparámetro de red — los dejo todos heredados sin modificar de
-`ultralytics/cfg/default.yaml`. Los agrupo por categoría:
+`train_yolo11.py` **no** pasa overrides de ningún hiperparámetro de red — todos se heredan sin
+modificar de `ultralytics/cfg/default.yaml`. Agrupados por categoría:
 
 ### 6.1 Optimización / entrenamiento
 
@@ -358,10 +358,10 @@ Solo controlo parámetros de **ejecución/hardware** (no de red): `epochs`, `img
 > termina siendo una ruta local de carpeta (con `\` y `:` en Windows). Ese callback solo limpia el
 > carácter `/`, no `\` ni `:`, así que en Windows terminaría pasándole a W&B un nombre de proyecto
 > inválido y W&B lo rechazaría con `UsageError: Invalid project name '...': cannot contain
-> characters '/,\,#,?,%,:'`. Por eso hago que el script inicialice W&B antes de `model.train()`,
-> con `project=WANDB_PROJECT` (el proyecto único y limpio, sin caracteres de ruta) y `name=` la
+> characters '/,\,#,?,%,:'`. El fix es inicializar W&B antes de `model.train()`, con
+> `project=WANDB_PROJECT` (el proyecto único y limpio, sin caracteres de ruta) y `name=` la
 > corrida — el callback nativo detecta que ya hay un run activo (`wb.run`) y solo loguea métricas
-> en él, sin volver a llamar a `wb.init()`. De paso, ya no le paso `project=` a `model.train()`,
+> en él, sin volver a llamar a `wb.init()`. De paso, `model.train()` ya **no** recibe `project=`,
 > así que los resultados locales quedan en `runs/detect/<name>/`, el default de Ultralytics,
 > independiente del proyecto de W&B.
 
@@ -494,9 +494,9 @@ La integración nativa de Ultralytics (`ultralytics/utils/callbacks/wb.py`, acti
 - Curvas Precision-Recall, F1-Confidence (una serie por clase; acá solo `person`)
 - Matriz de confusión y artefacto del mejor checkpoint (`best.pt`)
 
-Agregué un callback adicional (`log_person_metrics`, en `on_fit_epoch_end`) que registra las
-mismas métricas con nombres explícitos bajo el prefijo `person/` para lectura directa en el
-dashboard:
+`train_yolo11.py` agrega un callback adicional (`log_person_metrics`, en `on_fit_epoch_end`) que
+registra las mismas métricas con nombres explícitos bajo el prefijo `person/` para lectura
+directa en el dashboard:
 
 - `person/precision`, `person/recall`, `person/f1_score`
 - `person/mAP50`, `person/mAP50-95`
