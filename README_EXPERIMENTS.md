@@ -6,10 +6,10 @@ Biases. No modifica `requirements.txt` ni ningún archivo del paquete `ultralyti
 
 > **Alcance actual: solo Nano y Small.** Empecé con `yolo11l.pt` (Large) — exigía demasiado
 > cómputo/VRAM para este flujo — pasé a `yolo11m.pt` (Medium), y finalmente recorté el alcance del
-> proyecto a Nano y Small únicamente (ver sección 8 para los números concretos de parámetros/
+> proyecto a Nano y Small únicamente (ver sección 9 para los números concretos de parámetros/
 > FLOPs detrás de esa decisión). `--model yolo11m.pt` (o `yolo11l.pt`) sigue siendo técnicamente
 > válido para retomarlos: el script no cambió, solo el plan de experimentos documentado acá (ver
-> "Otros tamaños de modelo" al final de la sección 8).
+> "Otros tamaños de modelo" al final de la sección 9).
 
 ## Instrucciones de ejecución
 
@@ -20,12 +20,13 @@ Sigue este orden para reproducir el experimento sin errores:
    el archivo independiente armado para este flujo en Windows.
 2. **Configuración de parámetros**: apunta `data/visdrone_base.yaml` y
    `data/visdrone_augmented.yaml` (sección 5) a tu dataset real, y copia `.env.example` a `.env`
-   (sección 7) con tu `WANDB_API_KEY`/`WANDB_PROJECT` reales. No toques los hiperparámetros de red
-   (sección 6) — quedan idénticos en las cuatro corridas.
-3. **Ejecución**: corre `train_yolo11.py` con los comandos de PowerShell de la sección 8 — cuatro
+   (sección 8) con tu `WANDB_API_KEY`/`WANDB_PROJECT` reales. No toques los hiperparámetros de red
+   (sección 6) ni la metodología de fine-tuning (sección 7) — quedan idénticos en las cuatro
+   corridas.
+3. **Ejecución**: corre `train_yolo11.py` con los comandos de PowerShell de la sección 9 — cuatro
    corridas: Nano y Small, cada uno con Base y Augmented.
 4. **Resolución de problemas**: si algo falla o los resultados difieren de lo esperado, revisa la
-   sección 11 al final de este documento — reúne los problemas que encontré y resolví durante
+   sección 12 al final de este documento — reúne los problemas que encontré y resolví durante
    estas pruebas (fallo de CUDA en la RTX 5060 Ti, build de `stringzilla`, proyecto de W&B mal
    nombrado, entrenamiento lento por OOM silencioso).
 
@@ -266,9 +267,45 @@ hiperparámetros.
 > aumento de detección que usan estos experimentos.
 
 Solo controlo parámetros de **ejecución/hardware** (no de red): `epochs`, `imgsz`, `batch`,
-`workers`, `amp`, `device` — ver sección 8.
+`workers`, `amp`, `device` — ver sección 9.
 
-## 7. Credenciales W&B (seguras, sin hardcodear)
+## 7. Metodología de entrenamiento (transfer learning / fine-tuning)
+
+- **Transfer learning + fine-tuning desde pesos preentrenados en COCO, no entrenamiento desde
+  cero.** `train_yolo11.py` siempre instancia `YOLO(args.model)` con un checkpoint `.pt`
+  (`yolo11n.pt`/`yolo11s.pt`), nunca con un `.yaml` de arquitectura sin entrenar. Verifiqué en
+  `ultralytics/engine/trainer.py:803-836` (`BaseTrainer.setup_model`): cuando `self.model` termina
+  en `.pt`, llama a `load_checkpoint(self.model)` y usa esos pesos como punto de partida — no hay
+  inicialización aleatoria. `pretrained: True` en `ultralytics/cfg/default.yaml:25` confirma la
+  intención por defecto, y el script no la sobreescribe.
+
+- **Ninguna capa congelada — fine-tuning completo desde la época 1.** `train_yolo11.py` no pasa
+  `freeze=` a `model.train()`, así que se usa el default de Ultralytics: `freeze: None`
+  (`ultralytics/cfg/default.yaml:39`, "freeze first N layers"), es decir, **todos los parámetros
+  son entrenables desde el inicio**, incluido el backbone. No hay una fase inicial con backbone
+  congelado ni un "unfreeze" progresivo — a diferencia de otros flujos de transfer learning (p.
+  ej. clasificación con `torchvision`, donde congelar el backbone las primeras épocas es común),
+  acá se ajusta la red completa desde el primer paso.
+
+- **Hiperparámetros clave del fine-tuning** (ya listados en la sección 6.1; acá el porqué de cada
+  uno en el contexto de partir de pesos preentrenados):
+
+  | Parámetro | Valor | Qué significa para el fine-tuning |
+  |---|---|---|
+  | `optimizer` | `auto` | Ultralytics elige el optimizador (`AdamW` o `SGD` según el tamaño del dataset y el número de iteraciones estimadas) y ajusta `lr0`/`momentum` en consecuencia — ver `build_optimizer` en `ultralytics/engine/trainer.py` |
+  | `lr0` | `0.01` | Tasa de aprendizaje inicial — el punto de partida del *scheduler*, no la tasa efectiva desde el paso 0 (ver `warmup_epochs` abajo) |
+  | `lrf` | `0.01` | Fracción final: la LR decae hasta `lr0 × lrf = 0.0001` al terminar las 250 épocas |
+  | `cos_lr` | `False` | El *scheduler* decae la LR **linealmente** de `lr0` a `lr0 × lrf`, no con un coseno |
+  | `warmup_epochs` | `3.0` | Las primeras 3 épocas usan *warmup*: la LR sube gradualmente en vez de arrancar de golpe en `lr0`, para no desestabilizar los pesos preentrenados con gradientes grandes al inicio |
+  | `warmup_momentum` | `0.8` | Durante el warmup, el momentum del optimizador también empieza más bajo (`0.8`) y sube hasta `momentum: 0.937` |
+  | `warmup_bias_lr` | `0.1` | Los parámetros de sesgo (`bias`) usan una LR de warmup más alta que el resto de la red, una práctica estándar de Ultralytics para converger más rápido sin desestabilizar los pesos ya entrenados |
+
+  Esta combinación (fine-tuning completo, sin capas congeladas, warmup de 3 épocas, decaimiento
+  lineal) es la misma en las cuatro corridas — Nano y Small parten de sus respectivos checkpoints
+  de COCO, no de una arquitectura sin entrenar, y ambos ajustan el 100% de sus parámetros contra
+  VisDrone.
+
+## 8. Credenciales W&B (seguras, sin hardcodear)
 
 - `.env.example` (versionado en git, sin secretos reales) documenta las variables requeridas.
 - `.env` (NO versionado, ver `.gitignore`) contiene la `WANDB_API_KEY` real.
@@ -301,7 +338,7 @@ Solo controlo parámetros de **ejecución/hardware** (no de red): `epochs`, `img
 > así que los resultados locales quedan en `runs/detect/<name>/`, el default de Ultralytics,
 > independiente del proyecto de W&B.
 
-## 8. Ejecutar las cuatro corridas (PowerShell)
+## 9. Ejecutar las cuatro corridas (PowerShell)
 
 Con el entorno `yolov11` (sección 3) activado, ejecuta las cuatro corridas — Nano y Small, cada
 uno con Base y Augmented:
@@ -419,7 +456,7 @@ python train_yolo11.py `
 > `--batch -1`) — cuanto más grande el modelo y mayor la resolución, más cerca del límite de 16 GB
 > de VRAM, y VisDrone agrava el riesgo de OOM en `TaskAlignedAssigner` (ver nota más arriba).
 
-## 9. Métricas registradas en W&B
+## 10. Métricas registradas en W&B
 
 La integración nativa de Ultralytics (`ultralytics/utils/callbacks/wb.py`, activada vía
 `settings.update({"wandb": True})`) ya registra automáticamente, por época:
@@ -445,7 +482,7 @@ directa en el dashboard:
   existe accuracy de clasificación estándar cuando no hay negativos verdaderos explícitos por
   imagen)
 
-## 10. Verificación de GPU (incluida en el script)
+## 11. Verificación de GPU (incluida en el script)
 
 Antes de cada entrenamiento, `train_yolo11.py` imprime y valida:
 
@@ -472,7 +509,7 @@ credenciales de W&B o el dataset.
 > corres el script; si se repite en cada corrida, revisa que estés lanzando `train_yolo11.py`
 > siempre desde el mismo directorio.
 
-## 11. Resolución de problemas
+## 12. Resolución de problemas
 
 Problemas reales que encontré y resolví durante estas pruebas, en el orden en que suelen
 aparecer. Cada fila tiene la explicación completa en la sección indicada.
@@ -481,6 +518,6 @@ aparecer. Cada fila tiene la explicación completa en la sección indicada.
 |---|---|---|---|
 | `torch.cuda.is_available()` da `True` pero el entrenamiento falla o cae a CPU sin avisar | El wheel de PyTorch instalado (`cu124`) no incluye kernels para Blackwell (`sm_120`, RTX 50-series) | Reinstalar con `--index-url https://download.pytorch.org/whl/cu128` | sección 1, sección 4 |
 | `pip install -r requirements-windows.txt` falla con `Building wheel for stringzilla ... Microsoft Visual C++ 14.0 or greater is required` | `albumentations` arrastra `albucore`→`stringzilla>=3.10.4`, que no publica wheel para Windows desde su serie 2.x | Instalar *Build Tools for Visual Studio* y marcar explícitamente el workload **"Desktop development with C++"** (el instalador base solo, sin ese workload, no basta) | sección 2 |
-| `wandb.errors.UsageError: Invalid project name '...': cannot contain characters '/,\,#,?,%,:'` | El callback nativo de Ultralytics derivaría el nombre de proyecto de W&B a partir de una ruta local de Windows (con `\` y `:`) si se le pasa `project=` a `model.train()` | El script llama a `wandb.init(project=..., name=...)` con el nombre de proyecto limpio antes de `model.train()`, y no le pasa `project=` a `model.train()` | sección 7 |
-| GPU casi al 100% de uso pero el entrenamiento no avanza (época pegada) | `WARNING: CUDA OutOfMemoryError in TaskAlignedAssigner, using CPU` — `batch`/`imgsz` demasiado altos para la VRAM disponible con este dataset (VisDrone tiene muchísimas cajas por imagen) | Bajar `--batch` y/o `--imgsz`, o usar `--batch -1` (AutoBatch) | sección 8 |
-| Se descarga `yolo26n.pt` al arrancar cada corrida, aunque uses `--model yolo11n.pt`/`yolo11s.pt` | Chequeo automático de AMP de Ultralytics, no un error ni algo específico de tu `--model` | Nada que arreglar — se cacheará tras la primera descarga si siempre lanzas el script desde el mismo directorio | sección 10 |
+| `wandb.errors.UsageError: Invalid project name '...': cannot contain characters '/,\,#,?,%,:'` | El callback nativo de Ultralytics derivaría el nombre de proyecto de W&B a partir de una ruta local de Windows (con `\` y `:`) si se le pasa `project=` a `model.train()` | El script llama a `wandb.init(project=..., name=...)` con el nombre de proyecto limpio antes de `model.train()`, y no le pasa `project=` a `model.train()` | sección 8 |
+| GPU casi al 100% de uso pero el entrenamiento no avanza (época pegada) | `WARNING: CUDA OutOfMemoryError in TaskAlignedAssigner, using CPU` — `batch`/`imgsz` demasiado altos para la VRAM disponible con este dataset (VisDrone tiene muchísimas cajas por imagen) | Bajar `--batch` y/o `--imgsz`, o usar `--batch -1` (AutoBatch) | sección 9 |
+| Se descarga `yolo26n.pt` al arrancar cada corrida, aunque uses `--model yolo11n.pt`/`yolo11s.pt` | Chequeo automático de AMP de Ultralytics, no un error ni algo específico de tu `--model` | Nada que arreglar — se cacheará tras la primera descarga si siempre lanzas el script desde el mismo directorio | sección 11 |
