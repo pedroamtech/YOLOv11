@@ -54,6 +54,39 @@ def parse_args():
     return parser.parse_args()
 
 
+def log_person_metrics(trainer):
+    """Log 'person'-prefixed aliases of the current metrics to W&B, explicit for a single-class dashboard.
+
+    nc=1 ("person"), so the mean-over-classes values below already ARE the per-class "person" values. Runs
+    after Ultralytics' own on_fit_epoch_end (see README_EXPERIMENTS.md section 9), so this queues (commit=False)
+    and lets that callback's commit=True flush both into the same step.
+    """
+    import wandb
+
+    box = trainer.validator.metrics.box
+    p, r, map50, map50_95 = box.mp, box.mr, box.map50, box.map
+    f1 = 2 * p * r / (p + r + 1e-9)
+
+    # ConfusionMatrix.matrix is (nc+1, nc+1); with nc=1, index 0 = "person", index 1 = "background".
+    cm = trainer.validator.metrics.confusion_matrix.matrix
+    tp, fp, fn = cm[0, 0], cm[0, 1], cm[1, 0]
+    accuracy = tp / (tp + fp + fn + 1e-9)  # Jaccard index TP/(TP+FP+FN); no classification-style accuracy applies here
+
+    wandb.run.log(
+        {
+            "person/precision": p,
+            "person/recall": r,
+            "person/f1_score": f1,
+            "person/mAP50": map50,
+            "person/mAP50-95": map50_95,
+            "person/iou_at_0.5": map50,  # dataset-level detection rate at IoU>=0.5 == mAP50 for a single class
+            "person/accuracy": accuracy,
+        },
+        step=trainer.epoch + 1,
+        commit=False,
+    )
+
+
 def verify_gpu():
     """Print CUDA/GPU diagnostics and fail fast if the RTX 5060 Ti is not visible to PyTorch."""
     if not torch.cuda.is_available():
@@ -82,11 +115,16 @@ def main():
 
     import wandb
 
-    wandb.login(key=wandb_api_key)
-    # Start the W&B run ourselves so every experiment lands in the SAME project (e.g. an existing
-    # "YOLOv11" project), distinguished only by --name. If we didn't do this, Ultralytics' built-in
-    # wb.py callback would call wandb.init(project=trainer.args.project, ...) itself using the local
-    # results `project` folder as the W&B project name, creating a new project per run.
+    # No explicit wandb.login() call: WANDB_API_KEY is already in os.environ from load_dotenv() above, and
+    # wandb.init() picks it up on its own. This also sidesteps wandb.login()'s stricter key-format validation
+    # in some versions (rejects keys that don't match the legacy personal-key length), which service-account
+    # keys can trip even though they're valid — exporting the env var and letting init() authenticate is the
+    # more robust path regardless of wandb version.
+    #
+    # Start the W&B run ourselves so every experiment lands in the SAME project (e.g. an existing "YOLOv11"
+    # project), distinguished only by --name. If we didn't do this, Ultralytics' built-in wb.py callback
+    # would call wandb.init(project=trainer.args.project, ...) itself using the local results `project`
+    # folder as the W&B project name, creating a new project per run.
     wandb.init(project=project, name=args.name, config=vars(args))
 
     verify_gpu()
@@ -96,6 +134,7 @@ def main():
     settings.update({"wandb": True})  # enables ultralytics/utils/callbacks/wb.py (mAP, PR/F1 curves, losses, etc.)
 
     model = YOLO(args.model)
+    model.add_callback("on_fit_epoch_end", log_person_metrics)
     model.train(
         data=args.data,
         epochs=args.epochs,

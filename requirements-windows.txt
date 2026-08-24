@@ -1,4 +1,4 @@
-# Windows manual install list for the VisDrone / YOLO11M (yolo11m.pt) experiments.
+# Windows manual install list for the VisDrone / YOLO11 Nano+Small (yolo11n.pt / yolo11s.pt) experiments.
 # This file is INDEPENDENT from the repo's root requirements.txt and does not replace it.
 #
 # IMPORTANT — install order matters:
