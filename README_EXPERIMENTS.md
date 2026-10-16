@@ -19,13 +19,14 @@ Se sigue este orden para reproducir el experimento sin errores:
    dependencias — **no** el `requirements.txt` original del repo, sino
    `requirements-windows.txt` (sección 4), el archivo independiente armado para este flujo en
    Windows.
-2. **Configuración de parámetros**: se apuntan `data/visdrone_base.yaml` y
-   `data/visdrone_augmented.yaml` (sección 5) al dataset real, y se copia `.env.example` a `.env`
+2. **Configuración de parámetros**: se apuntan `data/visdrone_base.yaml`,
+   `data/visdrone_augmented.yaml` y `data/visdrone_combined.yaml` (sección 5) al dataset real, y se copia `.env.example` a `.env`
    (sección 8) con las credenciales reales de `WANDB_API_KEY`/`WANDB_PROJECT`. No se modifican
    los hiperparámetros de red (sección 6) ni la metodología de fine-tuning (sección 7) — quedan
    idénticos en las cuatro corridas.
 3. **Ejecución**: se ejecuta `train_yolo11.py` con los comandos de PowerShell de la sección 9 —
-   cuatro corridas: Nano y Small, cada uno con Base y Augmented.
+   cuatro corridas: Nano y Small, cada uno con Base y Augmented — más el experimento 3 (Nano y
+   Small con Combined: originales + aumentadas en el entrenamiento).
 4. **Resolución de problemas**: si algo falla o los resultados difieren de lo esperado, se revisa
    la sección 12 al final de este documento, que reúne los problemas que se encontraron y
    resolvieron durante las pruebas (fallo de CUDA en la RTX 5060 Ti, build de `stringzilla`,
@@ -175,13 +176,16 @@ GitHub/
 │   ├── .env / .env.example
 │   ├── data/
 │   │   ├── visdrone_base.yaml
-│   │   └── visdrone_augmented.yaml
+│   │   ├── visdrone_augmented.yaml
+│   │   └── visdrone_combined.yaml      (lista: originales + aumentadas)
 │   └── runs/                           ← resultados (gitignored)
 │       └── detect/
 │           ├── nano_base/
 │           ├── nano_augmented/
+│           ├── nano_combined/
 │           ├── small_base/
-│           └── small_augmented/
+│           ├── small_augmented/
+│           └── small_combined/
 └── datasets/                           ← fuera del repo, no versionado, la puebla el usuario
     ├── VisDrone_person_base/
     │   ├── images/{train,val,test}/*.jpg
@@ -204,6 +208,23 @@ convención), hay tres opciones: moverla bajo `datasets_dir`, cambiar `datasets_
   casos, con los mismos valores por defecto de `ultralytics/cfg/default.yaml` en las cuatro
   corridas — la única variable entre dataset base y aumentado es el contenido físico de
   imágenes/etiquetas.
+- **Dataset combinado** (`visdrone_combined.yaml`, experimento 3) **no crea carpetas nuevas**: usa
+  una **lista** en `train:` con las dos carpetas de entrenamiento — `images/train` del dataset base
+  y `../VisDrone_person_augmented/images/train` (relativa a `path: VisDrone_person_base`). Ultralytics
+  encuentra cada etiqueta cambiando `/images/` por `/labels/` en la ruta de cada imagen, así que cada
+  carpeta usa sus propias etiquetas. `val:` (y `test:`) son **los mismos del dataset base**, para que
+  las métricas de los tres experimentos se midan sobre las mismas imágenes. Mismos hiperparámetros y
+  misma validación; la única variable es que el conjunto de entrenamiento **suma** ambos datasets en
+  vez de sustituir uno por otro. Se verifica el total de imágenes de entrenamiento con:
+
+  ```powershell
+  python -c "from ultralytics.data.utils import check_det_dataset; d = check_det_dataset('data/visdrone_combined.yaml'); print(d['train'], d['val'])"
+  ```
+
+  > El caché de etiquetas de la lista se guarda junto a la **primera** carpeta
+  > (`VisDrone_person_base\labels\train.cache`), el mismo archivo que usa la corrida base. Al
+  > alternar entre `base` y `combined` el caché se reconstruye cada vez (cambia el hash): es
+  > inofensivo, solo agrega unos segundos al arranque.
 
 ## 6. Hiperparámetros (idénticos en las cuatro corridas)
 
@@ -340,8 +361,9 @@ Solo se controlan parámetros de **ejecución/hardware** (no de red): `epochs`, 
 - `train_yolo11.py` carga `.env` con `python-dotenv`; si `WANDB_API_KEY` falta, el script aborta
   con un mensaje claro en vez de entrenar sin tracking.
 - Las cuatro corridas reportan al **mismo proyecto W&B** (`WANDB_PROJECT`, p. ej. `YOLOv11`);
-  modelo (Nano/Small) y dataset (Base/Augmented) se distinguen por el **nombre de la corrida**
-  (`--name nano_base`, `nano_augmented`, `small_base`, `small_augmented`), no por el proyecto.
+  modelo (Nano/Small) y dataset (Base/Augmented/Combined) se distinguen por el **nombre de la corrida**
+  (`--name nano_base`, `nano_augmented`, `nano_combined`, `small_base`, `small_augmented`,
+  `small_combined`), no por el proyecto.
 
 > **Por qué el script no llama a `wandb.login(key=...)`**: en algunas versiones de `wandb`, esa
 > función valida que la key tenga exactamente el formato clásico de key personal (longitud fija)
@@ -417,10 +439,43 @@ python train_yolo11.py `
     --workers 8
 ```
 
+### Experimento 3 — dataset combinado (originales + aumentadas)
+
+Mismos parámetros que los experimentos 1 y 2; solo cambian `--data` y `--name`:
+
+```powershell
+# Nano — dataset combinado (originales + aumentadas)
+python train_yolo11.py `
+    --data data\visdrone_combined.yaml `
+    --name nano_combined `
+    --model yolo11n.pt `
+    --epochs 250 `
+    --imgsz 640 `
+    --batch 16 `
+    --workers 8
+
+# Small — dataset combinado (originales + aumentadas)
+python train_yolo11.py `
+    --data data\visdrone_combined.yaml `
+    --name small_combined `
+    --model yolo11s.pt `
+    --epochs 250 `
+    --imgsz 640 `
+    --batch 16 `
+    --workers 8
+```
+
+> **Duración**: el conjunto de entrenamiento combinado tiene aproximadamente el doble de imágenes
+> que el base, así que cada época tiene casi el doble de iteraciones y la corrida tarda
+> aproximadamente el doble. Si se quiere igualar el número total de iteraciones con las corridas base, se
+> puede usar `--epochs 125`, con un `--name` distinto (p. ej. `nano_combined_e125`) para no
+> sobrescribir resultados locales ni mezclar corridas en W&B.
+
 Los resultados locales quedan en subcarpetas independientes: `runs/detect/nano_base/`,
-`runs/detect/nano_augmented/`, `runs/detect/small_base/` y `runs/detect/small_augmented/` (ya
-cubiertas por la regla `runs/` del `.gitignore`). En W&B, las cuatro corridas caen en el mismo
-proyecto (`WANDB_PROJECT`), distinguidas por nombre de corrida.
+`runs/detect/nano_augmented/`, `runs/detect/nano_combined/`, `runs/detect/small_base/`,
+`runs/detect/small_augmented/` y `runs/detect/small_combined/` (ya cubiertas por la regla `runs/`
+del `.gitignore`). En W&B, todas las corridas caen en el mismo proyecto (`WANDB_PROJECT`),
+distinguidas por nombre de corrida.
 
 > **Resolución de imagen (`imgsz=640`, el estándar YOLO)**: en modo `train`, Ultralytics recibe
 > `imgsz` como un único entero que define el lado largo del letterbox cuadrado; el lado corto se

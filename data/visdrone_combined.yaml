@@ -1,0 +1,31 @@
+# VisDrone (single class: person) — Experiment 3: combined dataset (original + offline-augmented)
+# `train` is a LIST of two image folders, so training sees the original images AND their offline-
+# augmented copies — no files are copied or duplicated on disk. Ultralytics finds each label by
+# replacing /images/ with /labels/ in every image path, so each folder keeps using its own labels.
+#
+# `val` (and `test`) point at the ORIGINAL base split, identical to visdrone_base.yaml, so the
+# metrics of the 3 experiments (base / augmented / combined) are measured on the same images.
+# The YOLO built-in on-the-fly augmentations (mosaic, mixup, fliplr, etc.) still apply on top,
+# identically to Experiments 1 and 2 — train_yolo11.py does not change any hyperparameter; only the
+# training set differs (it ADDS both datasets instead of replacing one with the other).
+#
+# `path` is bare (no "../") like the other two yamls: Ultralytics resolves it against the global
+# `datasets_dir` setting (`from ultralytics import settings; print(settings["datasets_dir"])`).
+# The augmented folder is reached with "../" from that root, i.e. this expects:
+#   <repo-parent>/datasets/VisDrone_person_base/images/{train,val,test}
+#   <repo-parent>/datasets/VisDrone_person_base/labels/{train,val,test}
+#   <repo-parent>/datasets/VisDrone_person_augmented/images/train
+#   <repo-parent>/datasets/VisDrone_person_augmented/labels/train
+#
+# If your local copies live elsewhere, set `path` to an absolute path and adjust the `train` entries.
+
+path: VisDrone_person_base
+train:
+  - images/train # original images
+  - ../VisDrone_person_augmented/images/train # offline-augmented images
+val: images/val # same validation split as visdrone_base.yaml
+test: images/test
+
+nc: 1
+names:
+  0: person

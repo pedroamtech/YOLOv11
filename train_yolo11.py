@@ -7,8 +7,12 @@ Usage (PowerShell, from the repo root) — 4 runs: {nano, small} x {base, augmen
     python train_yolo11.py --model yolo11s.pt --data data\visdrone_base.yaml       --name small_base
     python train_yolo11.py --model yolo11s.pt --data data\visdrone_augmented.yaml  --name small_augmented
 
-All 4 commands pass identical --epochs/--imgsz/--batch/--workers so the 4 runs stay comparable;
-only --model and --data (and therefore --name) differ. All 4 runs report to the SAME W&B project
+Experiment 3 — combined dataset (original + offline-augmented train images, same base val split):
+    python train_yolo11.py --model yolo11n.pt --data data\visdrone_combined.yaml   --name nano_combined
+    python train_yolo11.py --model yolo11s.pt --data data\visdrone_combined.yaml   --name small_combined
+
+All commands pass identical --epochs/--imgsz/--batch/--workers so the runs stay comparable;
+only --model and --data (and therefore --name) differ. All runs report to the SAME W&B project
 (--project / WANDB_PROJECT, e.g. an existing "YOLOv11" project) and are told apart by --name, not
 by separate auto-created projects. See README_EXPERIMENTS.md.
 """
@@ -23,7 +27,12 @@ from dotenv import load_dotenv
 def parse_args():
     """Parse command-line arguments for a single training run."""
     parser = argparse.ArgumentParser(description="Train YOLO11 Nano/Small on VisDrone (Windows, RTX 5060 Ti, 16GB VRAM)")
-    parser.add_argument("--data", type=str, required=True, help="Path to visdrone_base.yaml or visdrone_augmented.yaml")
+    parser.add_argument(
+        "--data",
+        type=str,
+        required=True,
+        help="Path to visdrone_base.yaml, visdrone_augmented.yaml or visdrone_combined.yaml",
+    )
     parser.add_argument(
         "--model", type=str, default="yolo11n.pt", help="Checkpoint to fine-tune from: yolo11n.pt (Nano) or yolo11s.pt (Small)"
     )
@@ -31,7 +40,7 @@ def parse_args():
         "--project", type=str, default=None, help="W&B project name (single, shared); overrides WANDB_PROJECT from .env"
     )
     parser.add_argument(
-        "--name", type=str, required=True, help="Run name, e.g. nano_base / nano_augmented / small_base / small_augmented"
+        "--name", type=str, required=True, help="Run name, e.g. nano_base / nano_augmented / nano_combined / small_base / small_augmented / small_combined",
     )
     parser.add_argument("--epochs", type=int, default=250, help="Keep identical across all 4 runs")
     parser.add_argument(
